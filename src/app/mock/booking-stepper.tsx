@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils"
 
 import {
   frizerieFlow,
-  frizerieSpecialists,
+  specialistCatalog,
   type FlowOption,
   type FlowSelectionType,
 } from "./data/frizerie-flow"
@@ -128,7 +128,7 @@ export default function BookingStepper() {
   const [stepGroups, setStepGroups] = useState<string[][]>([[frizerieFlow.rootStepId]])
   const [currentGroupIndex, setCurrentGroupIndex] = useState(0)
   const [selectedOptions, setSelectedOptions] = useState<SelectedOptionsMap>({})
-  const [selectedSpecialist, setSelectedSpecialist] = useState<string | null>(null)
+  const [selectedSpecialists, setSelectedSpecialists] = useState<Record<string, string>>({})
   const [isMobile, setIsMobile] = useState(false)
   const [isPrimaryButtonInView, setPrimaryButtonInView] = useState(true)
   const primaryButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -143,9 +143,37 @@ export default function BookingStepper() {
     [selectedOptions, optionIndex]
   )
 
+  const specialistCategoryIds = useMemo(() => {
+    const seen = new Set<string>()
+    const ids: string[] = []
+
+    Object.values(selectedOptions).forEach((optionIds) => {
+      optionIds.forEach((optionId) => {
+        const entry = optionIndex[optionId]
+        if (!entry) return
+        const categoryId = entry.option.specialistCategoryId
+        if (!categoryId || seen.has(categoryId)) return
+        seen.add(categoryId)
+        ids.push(categoryId)
+      })
+    })
+
+    return ids
+  }, [selectedOptions, optionIndex])
+
   const canContinue = useMemo(() => {
     if (isFinalGroup) {
-      return summary.services.length > 0 && Boolean(selectedSpecialist)
+      if (summary.services.length === 0) {
+        return false
+      }
+
+      if (specialistCategoryIds.length === 0) {
+        return true
+      }
+
+      return specialistCategoryIds.every((categoryId) =>
+        Boolean(selectedSpecialists[categoryId])
+      )
     }
 
     if (currentGroup.length === 0) return false
@@ -163,10 +191,36 @@ export default function BookingStepper() {
   }, [
     currentGroup,
     isFinalGroup,
+    specialistCategoryIds,
     selectedOptions,
-    selectedSpecialist,
+    selectedSpecialists,
     summary.services.length,
   ])
+
+  useEffect(() => {
+    setSelectedSpecialists((prev) => {
+      const next: Record<string, string> = {}
+
+      specialistCategoryIds.forEach((categoryId) => {
+        if (prev[categoryId]) {
+          next[categoryId] = prev[categoryId]
+        }
+      })
+
+      const prevKeys = Object.keys(prev)
+      const nextKeys = Object.keys(next)
+      const sameLength = prevKeys.length === nextKeys.length
+      const sameValues = sameLength
+        ? nextKeys.every((key) => prev[key] === next[key])
+        : false
+
+      if (sameLength && sameValues) {
+        return prev
+      }
+
+      return next
+    })
+  }, [specialistCategoryIds])
 
   useEffect(() => {
     const updateViewportMatch = () => {
@@ -218,7 +272,7 @@ export default function BookingStepper() {
     ensureGroupsTrimmed()
 
     if (stepId !== SPECIALIST_STEP_ID) {
-      setSelectedSpecialist(null)
+      setSelectedSpecialists({})
     }
 
     setSelectedOptions((prev) => {
@@ -271,7 +325,7 @@ export default function BookingStepper() {
         services: summary.services,
         totalDuration: summary.totalDurationMinutes,
         totalPrice: summary.totalPrice,
-        specialist: selectedSpecialist,
+        specialists: selectedSpecialists,
       })
       return
     }
@@ -325,68 +379,128 @@ export default function BookingStepper() {
     )
   }
 
-  const renderSpecialistStep = () => (
-    <section key={SPECIALIST_STEP_ID} className="space-y-6">
-      <header className="space-y-1">
-        <h2 className="text-xl font-semibold">Alege specialistul</h2>
-        <p className="text-muted-foreground text-sm">
-          Selectează persoana preferată sau lasă-ne pe noi să alegem pentru tine.
-        </p>
-      </header>
-      <div className="grid gap-3">
-        {frizerieSpecialists.map((specialist) => {
-          const dateLabel = format(new Date(specialist.firstAvailableDate), "d MMM yyyy", {
-            locale: ro,
-          })
+  const renderSpecialistStep = () => {
+    const hasCategories = specialistCategoryIds.length > 0
 
-          const indicatorLabel =
-            specialist.rating > 0 ? `${specialist.rating.toFixed(1)}★` : "—"
+    return (
+      <section key={SPECIALIST_STEP_ID} className="space-y-6">
+        <header className="space-y-1">
+          <h2 className="text-xl font-semibold">Alege specialistul</h2>
+          <p className="text-muted-foreground text-sm">
+            Selectează persoana preferată pentru fiecare categorie sau lasă-ne pe noi să alegem.
+          </p>
+        </header>
+        {hasCategories ? (
+          <div className="space-y-6">
+            {specialistCategoryIds.map((categoryId) => {
+              const catalogEntry = specialistCatalog[categoryId]
+              const label = catalogEntry?.label ?? categoryId
+              const specialists = catalogEntry?.options ?? []
 
-          const isSelected = selectedSpecialist === specialist.id
-          const Indicator = isSelected ? CheckCircle2 : Circle
-
-          return (
-            <div
-              key={specialist.id}
-              role="radio"
-              aria-checked={isSelected}
-              tabIndex={0}
-              onClick={() =>
-                setSelectedSpecialist((prev) =>
-                  prev === specialist.id ? null : specialist.id
+              if (specialists.length === 0) {
+                return (
+                  <div key={categoryId} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-base font-semibold">{label}</h3>
+                      <span className="text-muted-foreground text-xs uppercase tracking-wide">
+                        Single choice
+                      </span>
+                    </div>
+                    <Card className="border-dashed">
+                      <CardContent className="text-muted-foreground py-6 text-sm">
+                        Nu sunt specialiști disponibili momentan pentru această categorie.
+                      </CardContent>
+                    </Card>
+                  </div>
                 )
               }
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault()
-                  setSelectedSpecialist((prev) =>
-                    prev === specialist.id ? null : specialist.id
-                  )
-                }
-              }}
-              className={cn(
-                "flex w-full cursor-pointer items-start justify-between gap-3 rounded-2xl border bg-card p-4 text-left shadow-sm transition hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                isSelected ? "border-primary bg-primary/5" : "border-border"
-              )}
-            >
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <Indicator className="mt-1 size-5 text-primary" aria-hidden="true" />
-                  <p className="text-base font-semibold">{specialist.name}</p>
+
+              return (
+                <div key={categoryId} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-semibold">{label}</h3>
+                    <span className="text-muted-foreground text-xs uppercase tracking-wide">
+                      Single choice
+                    </span>
+                  </div>
+                  <div className="grid gap-3">
+                    {specialists.map((specialist) => {
+                      const dateLabel = format(
+                        new Date(specialist.firstAvailableDate),
+                        "d MMM yyyy",
+                        {
+                          locale: ro,
+                        }
+                      )
+
+                      const indicatorLabel =
+                        specialist.rating > 0
+                          ? `${specialist.rating.toFixed(1)}★`
+                          : "—"
+
+                      const isSelected = selectedSpecialists[categoryId] === specialist.id
+                      const Indicator = isSelected ? CheckCircle2 : Circle
+
+                      const toggleSpecialist = () => {
+                        setSelectedSpecialists((prev) => {
+                          const next = { ...prev }
+                          if (prev[categoryId] === specialist.id) {
+                            delete next[categoryId]
+                            return next
+                          }
+                          next[categoryId] = specialist.id
+                          return next
+                        })
+                      }
+
+                      return (
+                        <div
+                          key={specialist.id}
+                          role="radio"
+                          aria-checked={isSelected}
+                          tabIndex={0}
+                          onClick={toggleSpecialist}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault()
+                              toggleSpecialist()
+                            }
+                          }}
+                          className={cn(
+                            "flex w-full cursor-pointer items-start justify-between gap-3 rounded-2xl border bg-card p-4 text-left shadow-sm transition hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            isSelected ? "border-primary bg-primary/5" : "border-border"
+                          )}
+                        >
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <Indicator className="mt-1 size-5 text-primary" aria-hidden="true" />
+                              <p className="text-base font-semibold">{specialist.name}</p>
+                            </div>
+                            <p className="text-muted-foreground text-sm">
+                              Prima dată disponibilă: {dateLabel}
+                            </p>
+                          </div>
+                          <span className="text-muted-foreground text-sm font-medium">
+                            {indicatorLabel}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-                <p className="text-muted-foreground text-sm">
-                  Prima dată disponibilă: {dateLabel}
-                </p>
-              </div>
-              <span className="text-muted-foreground text-sm font-medium">
-                {indicatorLabel}
-              </span>
-            </div>
-          )
-        })}
-      </div>
-    </section>
-  )
+              )
+            })}
+          </div>
+        ) : (
+          <Card className="border-dashed">
+            <CardContent className="text-muted-foreground py-6 text-sm">
+              Selectează cel puțin un serviciu pentru a alege un specialist.
+            </CardContent>
+          </Card>
+        )}
+      </section>
+    )
+  }
 
   return (
     <>
@@ -459,15 +573,27 @@ export default function BookingStepper() {
                     <span>Cost total</span>
                     <span className="font-semibold">{formatPrice(summary.totalPrice)}</span>
                   </div>
-                  {selectedSpecialist && (
-                    <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground">
-                      <span>Specialist</span>
-                      <span>
-                        {
-                          frizerieSpecialists.find((item) => item.id === selectedSpecialist)?.name ??
-                          "—"
-                        }
-                      </span>
+                  {Object.keys(selectedSpecialists).length > 0 && (
+                    <div className="flex flex-col gap-1 pt-1 text-xs text-muted-foreground">
+                      {specialistCategoryIds
+                        .filter((categoryId) => selectedSpecialists[categoryId])
+                        .map((categoryId) => {
+                          const entry = specialistCatalog[categoryId]
+                          const label = entry?.label ?? categoryId
+                          const specialistName = entry?.options.find(
+                            (item) => item.id === selectedSpecialists[categoryId]
+                          )?.name ?? "—"
+
+                          return (
+                            <div
+                              key={categoryId}
+                              className="flex items-center justify-between"
+                            >
+                              <span>{label}</span>
+                              <span>{specialistName}</span>
+                            </div>
+                          )
+                        })}
                     </div>
                   )}
                 </div>
