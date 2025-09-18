@@ -2,8 +2,17 @@
 
 import { useMemo, useState } from "react"
 import { format } from "date-fns"
-import { Clock, HeartHandshake, Scissors } from "lucide-react"
+import { ro } from "date-fns/locale"
+import {
+  CheckCircle2,
+  CheckSquare,
+  Circle,
+  ChevronRight,
+  Sparkles,
+  Square,
+} from "lucide-react"
 
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -12,335 +21,409 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+
 import {
-  Stepper,
-  StepperDescription,
-  StepperIndicator,
-  StepperItem,
-  StepperSeparator,
-  StepperTitle,
-  StepperTrigger,
-} from "@/components/ui/stepper"
+  frizerieFlow,
+  frizerieSpecialists,
+  type FlowOption,
+  type FlowSelectionType,
+} from "./data/frizerie-flow"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Calendar } from "@/components/ui/calendar"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
+  buildFlowOptionIndex,
+  calculateBookingSummary,
+  collectDescendantStepIds,
+  deriveNextStepIds,
+  type SelectedOptionsMap,
+} from "./lib/flow-utils"
 
-const services = [
-  {
-    value: "signature-cut",
-    label: "Signature Cut",
-    description: "Precision haircut tailored to your lifestyle",
-    icon: Scissors,
-    duration: "45 mins",
-    price: "$85",
-  },
-  {
-    value: "balayage",
-    label: "Radiant Balayage",
-    description: "Seamless color melt with custom tones",
-    icon: HeartHandshake,
-    duration: "2 hrs",
-    price: "$210",
-  },
-  {
-    value: "scalp-ritual",
-    label: "Scalp Revival Ritual",
-    description: "Detoxifying cleanse, treat, and massage",
-    icon: Clock,
-    duration: "60 mins",
-    price: "$120",
-  },
-]
+const SPECIALIST_STEP_ID = "specialist-selection"
 
-const stylists = [
-  { value: "maya", label: "Maya Park", specialty: "Color Expert" },
-  { value: "leo", label: "Leo Martinez", specialty: "Precision Cutting" },
-  { value: "nina", label: "Nina Foster", specialty: "Texture Specialist" },
-  { value: "no-preference", label: "No preference", specialty: "Match me automatically" },
-]
+const formatDuration = (minutes: number) => {
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
 
-const timeSlots = [
-  "09:00 AM",
-  "10:30 AM",
-  "12:00 PM",
-  "01:30 PM",
-  "03:00 PM",
-  "04:30 PM",
-]
+  if (hours && mins) {
+    return `${hours}h ${mins}m`
+  }
 
-const steps = [
-  {
-    title: "Choose Service",
-    description: "Pick the treatment you’re craving",
-  },
-  {
-    title: "Pick Stylist",
-    description: "Select your preferred stylist",
-  },
-  {
-    title: "Date & Time",
-    description: "Reserve the perfect slot",
-  },
-  {
-    title: "Confirm",
-    description: "Review the appointment details",
-  },
-]
+  if (hours) {
+    return `${hours}h`
+  }
+
+  return `${mins}m`
+}
+
+const formatPrice = (value: number) =>
+  new Intl.NumberFormat("ro-RO", {
+    style: "currency",
+    currency: "RON",
+    minimumFractionDigits: 0,
+  }).format(value)
+
+interface OptionCardProps {
+  option: FlowOption
+  selectionType: FlowSelectionType
+  isSelected: boolean
+  onSelect: () => void
+}
+
+const OptionCard = ({ option, selectionType, isSelected, onSelect }: OptionCardProps) => {
+  const IndicatorIcon = selectionType === "single"
+    ? isSelected
+      ? CheckCircle2
+      : Circle
+    : isSelected
+      ? CheckSquare
+      : Square
+
+  const role = selectionType === "single" ? "radio" : "checkbox"
+
+  return (
+    <div
+      role={role}
+      aria-checked={isSelected}
+      aria-disabled={option.isDisabled ?? false}
+      tabIndex={option.isDisabled ? -1 : 0}
+      onClick={option.isDisabled ? undefined : onSelect}
+      onKeyDown={(event) => {
+        if (option.isDisabled) return
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          onSelect()
+        }
+      }}
+      className={cn(
+        "flex w-full cursor-pointer items-start gap-3 rounded-2xl border bg-card p-4 text-left shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        option.isDisabled && "cursor-not-allowed opacity-60",
+        !option.isDisabled &&
+          (isSelected
+            ? "border-primary bg-primary/5"
+            : "border-border hover:border-primary/50 hover:bg-muted")
+      )}
+    >
+      <IndicatorIcon className="mt-1 size-5 text-primary" aria-hidden="true" />
+      <div className="flex flex-1 flex-col gap-1">
+        <div className="flex items-center justify-between gap-4">
+          <p className="font-medium">{option.label}</p>
+          {option.hasChildren && <ChevronRight className="size-4 text-muted-foreground" />}
+        </div>
+        {option.description && (
+          <p className="text-muted-foreground text-sm">{option.description}</p>
+        )}
+        {!option.hasChildren && (
+          <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-3 text-xs font-medium">
+            {typeof option.durationMinutes === "number" && (
+              <span>Durată: {formatDuration(option.durationMinutes)}</span>
+            )}
+            {typeof option.price === "number" && <span>{formatPrice(option.price)}</span>}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export default function BookingStepper() {
-  const [currentStep, setCurrentStep] = useState(0)
-  const [service, setService] = useState(services[0]!.value)
-  const [stylist, setStylist] = useState(stylists[0]!.value)
-  const [date, setDate] = useState<Date | undefined>(new Date())
-  const [time, setTime] = useState(timeSlots[2]!)
-  const [notes, setNotes] = useState("")
+  const optionIndex = useMemo(() => buildFlowOptionIndex(frizerieFlow), [])
+  const [stepGroups, setStepGroups] = useState<string[][]>([[frizerieFlow.rootStepId]])
+  const [currentGroupIndex, setCurrentGroupIndex] = useState(0)
+  const [selectedOptions, setSelectedOptions] = useState<SelectedOptionsMap>({})
+  const [selectedSpecialist, setSelectedSpecialist] = useState<string | null>(null)
 
-  const selectedService = useMemo(
-    () => services.find((item) => item.value === service) ?? services[0]!,
-    [service]
+  const currentGroup = stepGroups[currentGroupIndex] ?? []
+  const isFinalGroup = currentGroup.includes(SPECIALIST_STEP_ID)
+  const totalSteps = Math.max(stepGroups.length - 1, 0)
+
+  const summary = useMemo(
+    () => calculateBookingSummary(selectedOptions, frizerieFlow, optionIndex),
+    [selectedOptions, optionIndex]
   )
 
-  const selectedStylist = useMemo(
-    () => stylists.find((item) => item.value === stylist) ?? stylists[0]!,
-    [stylist]
+  const ensureGroupsTrimmed = () => {
+    setStepGroups((prev) => {
+      if (currentGroupIndex === prev.length - 1) {
+        return prev
+      }
+      return prev.slice(0, currentGroupIndex + 1)
+    })
+  }
+
+  const updateSelection = (stepId: string, optionId: string) => {
+    const step = frizerieFlow.steps[stepId]
+    if (!step) return
+
+    ensureGroupsTrimmed()
+
+    if (stepId !== SPECIALIST_STEP_ID) {
+      setSelectedSpecialist(null)
+    }
+
+    setSelectedOptions((prev) => {
+      const prevSelected = prev[stepId] ?? []
+      let nextSelected = prevSelected
+
+      if (step.selectionType === "single") {
+        nextSelected = [optionId]
+      } else {
+        const exists = prevSelected.includes(optionId)
+        nextSelected = exists
+          ? prevSelected.filter((id) => id !== optionId)
+          : [...prevSelected, optionId]
+      }
+
+      const removedOptionIds = prevSelected.filter((id) => !nextSelected.includes(id))
+
+      const draft: SelectedOptionsMap = { ...prev, [stepId]: nextSelected }
+      if (nextSelected.length === 0) {
+        delete draft[stepId]
+      }
+
+      if (removedOptionIds.length > 0) {
+        removedOptionIds.forEach((removedId) => {
+          const entry = optionIndex[removedId]
+          if (!entry) return
+          const descendantIds = collectDescendantStepIds(
+            entry.option.nextStepId,
+            frizerieFlow
+          )
+          descendantIds.forEach((descendantStepId) => {
+            delete draft[descendantStepId]
+          })
+        })
+      }
+
+      return draft
+    })
+  }
+
+  const goBack = () => {
+    if (currentGroupIndex === 0) return
+    setCurrentGroupIndex((prev) => Math.max(prev - 1, 0))
+  }
+
+  const goForward = () => {
+    if (isFinalGroup) {
+      console.info("Appointment confirmed", {
+        services: summary.services,
+        totalDuration: summary.totalDurationMinutes,
+        totalPrice: summary.totalPrice,
+        specialist: selectedSpecialist,
+      })
+      return
+    }
+
+    const nextStepIds = deriveNextStepIds(currentGroup, selectedOptions, optionIndex)
+    const trimmedGroups = stepGroups.slice(0, currentGroupIndex + 1)
+
+    if (nextStepIds.length > 0) {
+      setStepGroups([...trimmedGroups, nextStepIds])
+      setCurrentGroupIndex((prev) => prev + 1)
+      return
+    }
+
+    if (!trimmedGroups.some((group) => group.includes(SPECIALIST_STEP_ID))) {
+      setStepGroups([...trimmedGroups, [SPECIALIST_STEP_ID]])
+    }
+    setCurrentGroupIndex((prev) => prev + 1)
+  }
+
+  const canProceed = () => {
+    if (isFinalGroup) {
+      return summary.services.length > 0 && Boolean(selectedSpecialist)
+    }
+
+    if (currentGroup.length === 0) return false
+
+    return currentGroup.every((stepId) => {
+      if (stepId === SPECIALIST_STEP_ID) return true
+      const step = frizerieFlow.steps[stepId]
+      if (!step) return false
+      const selected = selectedOptions[stepId] ?? []
+      if (step.selectionType === "single") {
+        return selected.length === 1
+      }
+      return selected.length > 0
+    })
+  }
+
+  const renderStep = (stepId: string) => {
+    const step = frizerieFlow.steps[stepId]
+    if (!step) return null
+
+    const selected = selectedOptions[stepId] ?? []
+    const isSingle = step.selectionType === "single"
+
+    return (
+      <section key={step.id} className="space-y-4">
+        <header className="space-y-1">
+          <h2 className="text-xl font-semibold">{step.title}</h2>
+          {step.subtitle && (
+            <p className="text-muted-foreground text-sm">{step.subtitle}</p>
+          )}
+          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+            {isSingle ? "Single choice" : "Multiple choice"}
+          </p>
+        </header>
+
+        <div className={cn("grid gap-3", isSingle ? "grid-cols-1" : "md:grid-cols-2")}>
+          {step.options.map((option) => (
+            <OptionCard
+              key={option.id}
+              option={option}
+              selectionType={step.selectionType}
+              isSelected={selected.includes(option.id)}
+              onSelect={() => updateSelection(stepId, option.id)}
+            />
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  const renderSpecialistStep = () => (
+    <section className="space-y-6">
+      <header className="space-y-1">
+        <h2 className="text-xl font-semibold">Alege specialistul</h2>
+        <p className="text-muted-foreground text-sm">
+          Selectează persoana preferată sau lasă-ne pe noi să alegem pentru tine.
+        </p>
+      </header>
+      <div className="grid gap-3">
+        {frizerieSpecialists.map((specialist) => {
+          const dateLabel = format(new Date(specialist.firstAvailableDate), "d MMM yyyy", {
+            locale: ro,
+          })
+
+          const indicatorLabel =
+            specialist.rating > 0 ? `${specialist.rating.toFixed(1)}★` : "—"
+
+          const isSelected = selectedSpecialist === specialist.id
+          const Indicator = isSelected ? CheckCircle2 : Circle
+
+          return (
+            <div
+              key={specialist.id}
+              role="radio"
+              aria-checked={isSelected}
+              tabIndex={0}
+              onClick={() => setSelectedSpecialist(specialist.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault()
+                  setSelectedSpecialist(specialist.id)
+                }
+              }}
+              className={cn(
+                "flex w-full cursor-pointer items-start justify-between gap-3 rounded-2xl border bg-card p-4 text-left shadow-sm transition hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                isSelected ? "border-primary bg-primary/5" : "border-border"
+              )}
+            >
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <Indicator className="mt-1 size-5 text-primary" aria-hidden="true" />
+                  <p className="text-base font-semibold">{specialist.name}</p>
+                </div>
+                <p className="text-muted-foreground text-sm">
+                  Prima dată disponibilă: {dateLabel}
+                </p>
+              </div>
+              <span className="text-muted-foreground text-sm font-medium">
+                {indicatorLabel}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </section>
   )
-
-  const appointmentDate = date ? format(date, "EEEE, MMM d") : "Choose a date"
-
-  const goNext = () => setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1))
-  const goBack = () => setCurrentStep((prev) => Math.max(prev - 1, 0))
-
-  const isFinalStep = currentStep === steps.length - 1
-
-  const nextLabel = isFinalStep
-    ? "Confirm Booking"
-    : `Continue to ${steps[currentStep + 1]!.title}`
 
   return (
     <Card className="shadow-lg">
-      <CardHeader className="gap-4">
-        <CardTitle className="text-2xl font-semibold">Plan your visit</CardTitle>
+      <CardHeader className="gap-2">
+        <div className="flex items-center gap-2 text-primary text-sm font-medium">
+          <Sparkles className="size-4" aria-hidden="true" />
+          Flow mock Frizerie
+        </div>
+        <CardTitle className="text-2xl font-semibold">Planifică vizita</CardTitle>
         <CardDescription>
-          Follow four quick steps to secure your salon experience.
+          Navighează pașii de rezervare pentru a selecta serviciile dorite și specialistul potrivit.
         </CardDescription>
-        <div className="overflow-x-auto pb-2">
-          <Stepper
-            value={currentStep}
-            onValueChange={setCurrentStep}
-            className="min-w-[560px] items-start gap-4"
-          >
-            {steps.map((step, index) => (
-              <StepperItem
-                key={step.title}
-                step={index}
-                className="flex-1 max-md:items-start"
-              >
-                <StepperTrigger className="w-full justify-start gap-4 rounded-full px-4 py-2 text-left transition hover:bg-accent max-md:flex-col max-md:items-start">
-                  <StepperIndicator className="size-8" />
-                  <div className="flex flex-col gap-0.5">
-                    <StepperTitle className="text-sm font-semibold">
-                      {step.title}
-                    </StepperTitle>
-                    <StepperDescription className="max-sm:hidden">
-                      {step.description}
-                    </StepperDescription>
-                  </div>
-                </StepperTrigger>
-                {index < steps.length - 1 && (
-                  <StepperSeparator className="hidden flex-1 md:block" />
-                )}
-              </StepperItem>
-            ))}
-          </Stepper>
+        <div className="text-sm font-medium text-muted-foreground">
+          Pas {currentGroupIndex} din {totalSteps}
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-8">
-        {currentStep === 0 && (
-          <div className="grid gap-6">
-            <p className="text-muted-foreground text-sm">
-              Choose the service that aligns with your goals today. Pricing and visit length update as you explore options.
-            </p>
-            <div className="grid gap-4 md:grid-cols-3">
-              {services.map((item) => {
-                const Icon = item.icon
-                const isActive = service === item.value
-                return (
-                  <button
-                    key={item.value}
-                    onClick={() => setService(item.value)}
-                    className={`rounded-2xl border p-4 text-left shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-muted"}`}
-                  >
-                    <div className="flex items-center gap-3 text-sm font-semibold">
-                      <Icon className="size-5 text-primary" aria-hidden="true" />
-                      {item.label}
-                    </div>
-                    <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-                      {item.description}
-                    </p>
-                    <div className="text-muted-foreground mt-4 flex items-center justify-between text-xs font-medium">
-                      <span>{item.duration}</span>
-                      <span>{item.price}</span>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
+      <CardContent className="md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:gap-10">
+        <div className="space-y-10">
+          {currentGroup.map((stepId) =>
+            stepId === SPECIALIST_STEP_ID ? renderSpecialistStep() : renderStep(stepId)
+          )}
+        </div>
 
-        {currentStep === 1 && (
-          <div className="grid gap-6">
-            <p className="text-muted-foreground text-sm">
-              Have someone in mind? Let us know. Otherwise choose “No preference” and we’ll pair you with the best fit.
-            </p>
-            <div className="max-w-sm">
-              <Select value={stylist} onValueChange={setStylist}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a stylist" />
-                </SelectTrigger>
-                <SelectContent>
-                  {stylists.map((person) => (
-                    <SelectItem key={person.value} value={person.value}>
-                      <div className="flex flex-col text-left">
-                        <span className="font-medium">{person.label}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {person.specialty}
+        <aside className="mt-8 md:mt-0">
+          <Card className="border-dashed">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Rezumatul tău</CardTitle>
+              <CardDescription>
+                Serviciile finale se adaugă automat pe măsură ce le selectezi.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {summary.services.length === 0 ? (
+                <p className="text-muted-foreground text-sm">
+                  Selectează servicii pentru a vedea detaliile aici.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="max-h-64 space-y-3 overflow-y-auto pr-2">
+                    {summary.services.map((item) => (
+                      <div key={item.optionId} className="rounded-lg bg-muted/40 p-3">
+                        <p className="text-sm font-medium">{item.optionLabel}</p>
+                        <p className="text-muted-foreground text-xs">
+                          {formatDuration(item.durationMinutes)} • {formatPrice(item.price)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="border-t" />
+                  <div className="space-y-1 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span>Durată totală</span>
+                      <span className="font-semibold">
+                        {formatDuration(summary.totalDurationMinutes)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Cost total</span>
+                      <span className="font-semibold">{formatPrice(summary.totalPrice)}</span>
+                    </div>
+                    {selectedSpecialist && (
+                      <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground">
+                        <span>Specialist</span>
+                        <span>
+                          {
+                            frizerieSpecialists.find((item) => item.id === selectedSpecialist)?.name ??
+                            "—"
+                          }
                         </span>
                       </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid gap-3 text-sm">
-              <h3 className="font-semibold">Stylist highlight</h3>
-              <div className="rounded-xl border p-4 shadow-sm">
-                <p className="text-base font-medium">
-                  {selectedStylist.label}
-                </p>
-                <p className="text-muted-foreground text-sm">
-                  {selectedStylist.specialty}
-                </p>
-                <p className="text-muted-foreground mt-3 text-sm">
-                  Clients love {selectedStylist.label.split(" ")[0]} for their attention to detail and signature Glow finish.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {currentStep === 2 && (
-          <div className="grid gap-6">
-            <p className="text-muted-foreground text-sm">
-              Pick the day and time that works best. Slots update live based on stylist availability.
-            </p>
-            <div className="grid gap-8 md:grid-cols-[1.2fr_1fr]">
-              <div className="rounded-xl border p-4 shadow-sm">
-                <Calendar
-                  mode="single"
-                  selected={date}
-                  onSelect={setDate}
-                  className="mx-auto"
-                  captionLayout="buttons"
-                />
-              </div>
-              <div className="grid gap-4">
-                <h3 className="text-sm font-semibold text-muted-foreground">
-                  Available time slots
-                </h3>
-                <RadioGroup
-                  value={time}
-                  onValueChange={setTime}
-                  className="grid grid-cols-2 gap-2"
-                >
-                  {timeSlots.map((slot) => {
-                    const slotId = `time-${slot.toLowerCase().replace(/[^a-z0-9]/g, "-")}`
-                    const isActive = time === slot
-                    return (
-                      <div
-                        key={slot}
-                        className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-medium shadow-sm transition ${isActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"}`}
-                      >
-                        <RadioGroupItem value={slot} id={slotId} />
-                        <Label htmlFor={slotId} className="flex-1 cursor-pointer">
-                          {slot}
-                        </Label>
-                      </div>
-                    )
-                  })}
-                </RadioGroup>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {currentStep === 3 && (
-          <div className="grid gap-6">
-            <div className="rounded-2xl border p-6 shadow-sm">
-              <h3 className="text-lg font-semibold">Appointment summary</h3>
-              <dl className="mt-4 grid gap-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <dt className="text-muted-foreground">Service</dt>
-                  <dd className="font-medium">{selectedService.label}</dd>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-muted-foreground">Stylist</dt>
-                  <dd className="font-medium">{selectedStylist.label}</dd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-muted-foreground">When</dt>
-                  <dd className="font-medium">
-                    {appointmentDate} at {time}
-                  </dd>
-                </div>
-                <div className="flex items-center justify-between">
-                  <dt className="text-muted-foreground">Investment</dt>
-                  <dd className="font-medium">{selectedService.price}</dd>
-                </div>
-              </dl>
-            </div>
-
-            <div className="grid gap-2">
-              <label htmlFor="notes" className="text-sm font-medium">
-                Notes for your stylist (optional)
-              </label>
-              <Textarea
-                id="notes"
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                placeholder="Share inspiration, preferences, or sensitivities."
-                className="h-24"
-              />
-            </div>
-          </div>
-        )}
+              )}
+            </CardContent>
+          </Card>
+        </aside>
       </CardContent>
 
       <CardFooter className="flex flex-wrap justify-between gap-3">
-        <Button variant="ghost" onClick={goBack} disabled={currentStep === 0}>
-          Back
+        <Button variant="ghost" onClick={goBack} disabled={currentGroupIndex === 0}>
+          Înapoi
         </Button>
-        <div className="flex gap-3">
-          {!isFinalStep && (
-            <Button variant="outline" onClick={goNext}>
-              Save &amp; continue later
-            </Button>
-          )}
-          <Button onClick={goNext} className="min-w-44" disabled={isFinalStep && !date}>
-            {nextLabel}
-          </Button>
-        </div>
+        <Button onClick={goForward} disabled={!canProceed()} className="min-w-48">
+          {isFinalGroup ? "Confirmă programarea" : "Continuă"}
+        </Button>
       </CardFooter>
     </Card>
   )
