@@ -28,12 +28,14 @@ export default function MockBookingPage() {
       </div>
       <div className="relative z-10">
         <header className="bg-background/40 text-white backdrop-blur-md supports-[backdrop-filter:blur(0px)]:bg-background/30">
-          <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-            <Link href="#" className="flex items-center gap-2 text-lg font-semibold text-white hover:text-white/80">
-              <Sparkles className="size-6 text-white" aria-hidden="true" />
-              Glow &amp; Co.
-            </Link>
-            <NavigationMenu className="hidden md:flex text-white">
+          <div className="mx-auto flex h-16 max-w-6xl items-center px-4">
+            <div className="flex items-center md:flex-1">
+              <Link href="#" className="flex items-center gap-2 text-lg font-semibold text-white hover:text-white/80">
+                <Sparkles className="size-6 text-white" aria-hidden="true" />
+                Glow &amp; Co.
+              </Link>
+            </div>
+            <NavigationMenu className="hidden text-white md:flex md:flex-1 md:justify-center">
               <NavigationMenuList>
                 {navItems.map((item) => (
                   <NavigationMenuItem key={item.href}>
@@ -44,7 +46,9 @@ export default function MockBookingPage() {
                 ))}
               </NavigationMenuList>
             </NavigationMenu>
-            <ModeToggle />
+            <div className="flex justify-end md:flex-1">
+              <ModeToggle />
+            </div>
           </div>
         </header>
 
