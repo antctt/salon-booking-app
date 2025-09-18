@@ -329,7 +329,7 @@ export default function BookingStepper() {
   }
 
   const renderSpecialistStep = () => (
-    <section className="space-y-6">
+    <section key={SPECIALIST_STEP_ID} className="space-y-6">
       <header className="space-y-1">
         <h2 className="text-xl font-semibold">Alege specialistul</h2>
         <p className="text-muted-foreground text-sm">
