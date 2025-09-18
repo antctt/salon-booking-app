@@ -22,11 +22,11 @@ const navItems = [
 
 export default function MockBookingPage() {
   return (
-    <div className="relative min-h-screen overflow-hidden text-foreground">
+    <div className="relative flex min-h-screen flex-col overflow-hidden text-foreground">
       <div className="pointer-events-none absolute inset-0 z-0">
         <Silk speed={5} scale={1.2} color="#6D28D9" noiseIntensity={0.8} rotation={0.15} />
       </div>
-      <div className="relative z-10">
+      <div className="relative z-10 flex flex-1 flex-col">
         <header className="bg-background/40 text-white backdrop-blur-md supports-[backdrop-filter:blur(0px)]:bg-background/30">
           <div className="mx-auto flex h-16 max-w-6xl items-center px-4">
             <div className="flex items-center md:flex-1">
@@ -52,7 +52,7 @@ export default function MockBookingPage() {
           </div>
         </header>
 
-        <main className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 py-12">
+        <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 px-4 py-12">
           <section className="mx-auto flex max-w-3xl flex-col items-center gap-6 text-center text-white">
             <h1 className="text-5xl font-bold tracking-tight">Glow &amp; Co. Salon</h1>
             <div className="flex flex-wrap items-center justify-center gap-4">
