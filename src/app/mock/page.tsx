@@ -7,6 +7,7 @@ import {
   NavigationMenuList,
 } from "@/components/ui/navigation-menu"
 import { Button } from "@/components/ui/button"
+import { ModeToggle } from "@/components/mode-toggle"
 import BookingStepper from "./booking-stepper"
 
 import { Sparkles } from "lucide-react"
@@ -38,9 +39,7 @@ export default function MockBookingPage() {
               ))}
             </NavigationMenuList>
           </NavigationMenu>
-          <Button variant="outline" size="sm">
-            Switch Mode
-          </Button>
+          <ModeToggle />
         </div>
       </header>
 
