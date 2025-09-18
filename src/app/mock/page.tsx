@@ -45,32 +45,26 @@ export default function MockBookingPage() {
       </header>
 
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 py-12">
-        <section className="rounded-3xl bg-muted/40 p-10 text-center shadow-sm">
-          <div className="mx-auto flex max-w-3xl flex-col items-center gap-6">
-            <div className="flex items-center gap-3 text-base font-medium text-primary">
-              <Sparkles className="size-5" aria-hidden="true" />
-              Shine with confidence
-            </div>
-            <h1 className="text-4xl font-bold tracking-tight">
-              Book a fresh look with our award-winning stylists
-            </h1>
-            <p className="text-muted-foreground text-lg">
-              Choose from curated services, pair with a stylist you love, and hold the perfect slot in just a few steps.
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-4">
-              <Button size="lg">Explore Services</Button>
-              <Link href="#gallery" className="text-sm font-medium text-primary">
-                View gallery &rarr;
-              </Link>
-            </div>
+        <section className="mx-auto flex max-w-3xl flex-col items-center gap-6 text-center">
+          <div className="flex items-center gap-3 text-base font-medium text-primary">
+            <Sparkles className="size-5" aria-hidden="true" />
+            Shine with confidence
+          </div>
+          <h1 className="text-4xl font-bold tracking-tight">
+            Book a fresh look with our award-winning stylists
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            Choose from curated services, pair with a stylist you love, and hold the perfect slot in just a few steps.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            <Button size="lg" className="h-12 px-8 text-base font-semibold">
+              Book Now
+            </Button>
+            <Link href="#gallery" className="text-sm font-medium text-primary">
+              View gallery &rarr;
+            </Link>
           </div>
         </section>
-
-        <div className="flex justify-center">
-          <Button size="lg" className="h-12 w-48 text-base font-semibold">
-            Book Now
-          </Button>
-        </div>
 
         <BookingStepper />
       </main>
