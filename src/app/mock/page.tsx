@@ -58,7 +58,7 @@ export default function MockBookingPage() {
             <div className="flex flex-wrap items-center justify-center gap-4">
               <Button
                 size="sm"
-                className="px-6 text-sm font-semibold bg-white text-black hover:bg-white/80 dark:bg-black dark:text-white dark:hover:bg-black/80"
+                className="px-6 text-sm font-semibold border border-border bg-card text-card-foreground hover:bg-card/90"
               >
                 Book Now
               </Button>
