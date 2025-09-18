@@ -1,7 +1,7 @@
 'use client'
 
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { forwardRef, useRef, useMemo, useLayoutEffect } from 'react';
+import { forwardRef, useEffect, useRef, useLayoutEffect } from 'react';
 import { Color } from 'three';
 
 const hexToNormalizedRGB = hex => {
@@ -11,6 +11,21 @@ const hexToNormalizedRGB = hex => {
     parseInt(hex.slice(2, 4), 16) / 255,
     parseInt(hex.slice(4, 6), 16) / 255
   ];
+};
+
+const getNow = () => (typeof performance !== 'undefined' && typeof performance.now === 'function'
+  ? performance.now()
+  : Date.now());
+
+const TIME_SCALE = 0.1;
+
+let globalStartTime = null;
+
+const ensureGlobalStartTime = () => {
+  if (globalStartTime === null) {
+    globalStartTime = getNow();
+  }
+  return globalStartTime;
 };
 
 const vertexShader = `
@@ -72,6 +87,7 @@ void main() {
 
 const SilkPlane = forwardRef(function SilkPlane({ uniforms }, ref) {
   const { viewport } = useThree();
+  const startTimeRef = useRef(ensureGlobalStartTime());
 
   useLayoutEffect(() => {
     if (ref.current) {
@@ -79,11 +95,12 @@ const SilkPlane = forwardRef(function SilkPlane({ uniforms }, ref) {
     }
   }, [ref, viewport]);
 
-  useFrame((_, delta) => {
+  useFrame(() => {
     if (!ref.current) return;
     const { material } = ref.current;
     if (!material?.uniforms?.uTime) return;
-    material.uniforms.uTime.value += 0.1 * delta;
+    const elapsedSeconds = (getNow() - startTimeRef.current) / 1000;
+    material.uniforms.uTime.value = elapsedSeconds * TIME_SCALE;
   });
 
   return (
@@ -98,17 +115,39 @@ SilkPlane.displayName = 'SilkPlane';
 const Silk = ({ speed = 5, scale = 1, color = '#7B7481', noiseIntensity = 1.5, rotation = 0 }) => {
   const meshRef = useRef();
 
-  const uniforms = useMemo(
-    () => ({
+  const uniformsRef = useRef(null);
+
+  if (!uniformsRef.current) {
+    uniformsRef.current = {
       uSpeed: { value: speed },
       uScale: { value: scale },
       uNoiseIntensity: { value: noiseIntensity },
       uColor: { value: new Color(...hexToNormalizedRGB(color)) },
       uRotation: { value: rotation },
-      uTime: { value: 0 }
-    }),
-    [speed, scale, noiseIntensity, color, rotation]
-  );
+      uTime: { value: ((getNow() - ensureGlobalStartTime()) / 1000) * TIME_SCALE },
+    };
+  }
+
+  useEffect(() => {
+    uniformsRef.current.uSpeed.value = speed;
+  }, [speed]);
+
+  useEffect(() => {
+    uniformsRef.current.uScale.value = scale;
+  }, [scale]);
+
+  useEffect(() => {
+    uniformsRef.current.uNoiseIntensity.value = noiseIntensity;
+  }, [noiseIntensity]);
+
+  useEffect(() => {
+    const [r, g, b] = hexToNormalizedRGB(color);
+    uniformsRef.current.uColor.value.setRGB(r, g, b);
+  }, [color]);
+
+  useEffect(() => {
+    uniformsRef.current.uRotation.value = rotation;
+  }, [rotation]);
 
   return (
     <Canvas
@@ -116,7 +155,7 @@ const Silk = ({ speed = 5, scale = 1, color = '#7B7481', noiseIntensity = 1.5, r
       frameloop="always"
       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
     >
-      <SilkPlane ref={meshRef} uniforms={uniforms} />
+      <SilkPlane ref={meshRef} uniforms={uniformsRef.current} />
     </Canvas>
   );
 };
