@@ -8,7 +8,6 @@ import {
   CheckSquare,
   Circle,
   ChevronRight,
-  Sparkles,
   Square,
 } from "lucide-react"
 
@@ -139,8 +138,6 @@ export default function BookingStepper() {
     [stepGroups, currentGroupIndex]
   )
   const isFinalGroup = currentGroup.includes(SPECIALIST_STEP_ID)
-  const totalSteps = Math.max(stepGroups.length - 1, 0)
-
   const summary = useMemo(
     () => calculateBookingSummary(selectedOptions, frizerieFlow, optionIndex),
     [selectedOptions, optionIndex]
@@ -395,17 +392,10 @@ export default function BookingStepper() {
     <>
       <Card className="shadow-lg">
       <CardHeader className="gap-2">
-        <div className="flex items-center gap-2 text-primary text-sm font-medium">
-          <Sparkles className="size-4" aria-hidden="true" />
-          Flow mock Frizerie
-        </div>
         <CardTitle className="text-2xl font-semibold">Planifică vizita</CardTitle>
         <CardDescription>
           Navighează pașii de rezervare pentru a selecta serviciile dorite și specialistul potrivit.
         </CardDescription>
-        <div className="text-sm font-medium text-muted-foreground">
-          Pas {currentGroupIndex} din {totalSteps}
-        </div>
       </CardHeader>
 
       <CardContent className="md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:gap-10">

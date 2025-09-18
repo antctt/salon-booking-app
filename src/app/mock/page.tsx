@@ -46,18 +46,9 @@ export default function MockBookingPage() {
 
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 py-12">
         <section className="mx-auto flex max-w-3xl flex-col items-center gap-6 text-center">
-          <div className="flex items-center gap-3 text-base font-medium text-primary">
-            <Sparkles className="size-5" aria-hidden="true" />
-            Shine with confidence
-          </div>
-          <h1 className="text-4xl font-bold tracking-tight">
-            Book a fresh look with our award-winning stylists
-          </h1>
-          <p className="text-muted-foreground text-lg">
-            Choose from curated services, pair with a stylist you love, and hold the perfect slot in just a few steps.
-          </p>
+          <h1 className="text-5xl font-bold tracking-tight">Glow &amp; Co. Salon</h1>
           <div className="flex flex-wrap items-center justify-center gap-4">
-            <Button size="lg" className="h-12 px-8 text-base font-semibold">
+            <Button size="sm" className="px-6 text-sm font-semibold">
               Book Now
             </Button>
             <Link href="#gallery" className="text-sm font-medium text-primary">
