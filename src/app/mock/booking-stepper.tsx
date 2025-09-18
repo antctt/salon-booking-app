@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { format } from "date-fns"
+import { addDays, format } from "date-fns"
 import { ro } from "date-fns/locale"
 import {
   CheckCircle2,
@@ -20,6 +20,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
 
 import {
@@ -37,6 +38,7 @@ import {
 } from "./lib/flow-utils"
 
 const SPECIALIST_STEP_ID = "specialist-selection"
+const APPOINTMENT_STEP_ID = "appointment-scheduling"
 
 const formatDuration = (minutes: number) => {
   const hours = Math.floor(minutes / 60)
@@ -132,12 +134,52 @@ export default function BookingStepper() {
   const [isMobile, setIsMobile] = useState(false)
   const [isPrimaryButtonInView, setPrimaryButtonInView] = useState(true)
   const primaryButtonRef = useRef<HTMLButtonElement | null>(null)
+  const [appointmentDate, setAppointmentDate] = useState<Date | undefined>()
+  const [appointmentTime, setAppointmentTime] = useState<string | null>(null)
+
+  const timeSlots = useMemo(() => {
+    return Array.from({ length: 37 }, (_, index) => {
+      const totalMinutes = index * 15
+      const hour = Math.floor(totalMinutes / 60) + 9
+      const minute = totalMinutes % 60
+      return `${hour.toString().padStart(2, "0")}:${minute
+        .toString()
+        .padStart(2, "0")}`
+    })
+  }, [])
+
+  const today = useMemo(() => {
+    const date = new Date()
+    date.setHours(0, 0, 0, 0)
+    return date
+  }, [])
+
+  const bookedDates = useMemo(() => {
+    return [2, 4, 7].map((offset) => {
+      const date = addDays(today, offset)
+      date.setHours(0, 0, 0, 0)
+      return date
+    })
+  }, [today])
+
+  const disabledDates = useMemo(
+    () => [{ before: today }, ...bookedDates],
+    [bookedDates, today]
+  )
+
+  const initialCalendarMonth = useMemo(() => {
+    const base = new Date()
+    base.setHours(0, 0, 0, 0)
+    return base
+  }, [])
 
   const currentGroup = useMemo(
     () => stepGroups[currentGroupIndex] ?? [],
     [stepGroups, currentGroupIndex]
   )
-  const isFinalGroup = currentGroup.includes(SPECIALIST_STEP_ID)
+  const isSpecialistGroup = currentGroup.includes(SPECIALIST_STEP_ID)
+  const isAppointmentGroup = currentGroup.includes(APPOINTMENT_STEP_ID)
+  const isFinalGroup = isAppointmentGroup
   const summary = useMemo(
     () => calculateBookingSummary(selectedOptions, frizerieFlow, optionIndex),
     [selectedOptions, optionIndex]
@@ -162,7 +204,11 @@ export default function BookingStepper() {
   }, [selectedOptions, optionIndex])
 
   const canContinue = useMemo(() => {
-    if (isFinalGroup) {
+    if (isAppointmentGroup) {
+      return Boolean(appointmentDate && appointmentTime)
+    }
+
+    if (isSpecialistGroup) {
       if (summary.services.length === 0) {
         return false
       }
@@ -179,7 +225,9 @@ export default function BookingStepper() {
     if (currentGroup.length === 0) return false
 
     return currentGroup.every((stepId) => {
-      if (stepId === SPECIALIST_STEP_ID) return true
+      if (stepId === SPECIALIST_STEP_ID || stepId === APPOINTMENT_STEP_ID) {
+        return true
+      }
       const step = frizerieFlow.steps[stepId]
       if (!step) return false
       const selected = selectedOptions[stepId] ?? []
@@ -189,8 +237,11 @@ export default function BookingStepper() {
       return selected.length > 0
     })
   }, [
+    appointmentDate,
+    appointmentTime,
     currentGroup,
-    isFinalGroup,
+    isAppointmentGroup,
+    isSpecialistGroup,
     specialistCategoryIds,
     selectedOptions,
     selectedSpecialists,
@@ -253,6 +304,17 @@ export default function BookingStepper() {
       observer.disconnect()
     }
   }, [currentGroupIndex])
+
+  useEffect(() => {
+    const hasAppointmentStep = stepGroups.some((group) =>
+      group.includes(APPOINTMENT_STEP_ID)
+    )
+
+    if (!hasAppointmentStep && (appointmentDate || appointmentTime)) {
+      setAppointmentDate(undefined)
+      setAppointmentTime(null)
+    }
+  }, [appointmentDate, appointmentTime, stepGroups])
 
   const showFloatingAction = isMobile && canContinue && !isPrimaryButtonInView
 
@@ -326,12 +388,27 @@ export default function BookingStepper() {
         totalDuration: summary.totalDurationMinutes,
         totalPrice: summary.totalPrice,
         specialists: selectedSpecialists,
+        appointment: {
+          date: appointmentDate?.toISOString(),
+          time: appointmentTime,
+        },
       })
       return
     }
 
-    const nextStepIds = deriveNextStepIds(currentGroup, selectedOptions, optionIndex)
     const trimmedGroups = stepGroups.slice(0, currentGroupIndex + 1)
+
+    if (isSpecialistGroup) {
+      if (!trimmedGroups.some((group) => group.includes(APPOINTMENT_STEP_ID))) {
+        setStepGroups([...trimmedGroups, [APPOINTMENT_STEP_ID]])
+      } else {
+        setStepGroups(trimmedGroups)
+      }
+      setCurrentGroupIndex((prev) => prev + 1)
+      return
+    }
+
+    const nextStepIds = deriveNextStepIds(currentGroup, selectedOptions, optionIndex)
 
     if (nextStepIds.length > 0) {
       setStepGroups([...trimmedGroups, nextStepIds])
@@ -341,6 +418,8 @@ export default function BookingStepper() {
 
     if (!trimmedGroups.some((group) => group.includes(SPECIALIST_STEP_ID))) {
       setStepGroups([...trimmedGroups, [SPECIALIST_STEP_ID]])
+    } else {
+      setStepGroups(trimmedGroups)
     }
     setCurrentGroupIndex((prev) => prev + 1)
   }
@@ -502,6 +581,93 @@ export default function BookingStepper() {
     )
   }
 
+  const renderAppointmentStep = () => {
+    const formattedSelection = appointmentDate
+      ? format(appointmentDate, "EEEE, d MMMM yyyy", { locale: ro })
+      : null
+
+    const toggleTimeSlot = (slot: string) => {
+      setAppointmentTime((prev) => (prev === slot ? null : slot))
+    }
+
+    return (
+      <section key={APPOINTMENT_STEP_ID} className="space-y-6">
+        <header className="space-y-1">
+          <h2 className="text-xl font-semibold">Stabilește data și ora</h2>
+          <p className="text-muted-foreground text-sm">
+            Alege o zi disponibilă și un interval de timp care ți se potrivește.
+          </p>
+        </header>
+
+        <Card className="border shadow-sm">
+          <CardContent className="grid gap-0 p-0 md:grid-cols-[minmax(0,1fr)_minmax(0,240px)] md:min-h-[26rem]">
+            <div className="border-b p-6 md:border-b-0 md:border-r md:h-full">
+              <Calendar
+                mode="single"
+                selected={appointmentDate}
+                onSelect={setAppointmentDate}
+                defaultMonth={appointmentDate ?? initialCalendarMonth}
+                disabled={disabledDates}
+                showOutsideDays={false}
+                modifiers={{
+                  booked: bookedDates,
+                }}
+                modifiersClassNames={{
+                  booked: "[&>button]:line-through opacity-40",
+                }}
+                className="bg-transparent p-0 [--cell-size:--spacing(10)] md:[--cell-size:--spacing(12)]"
+                formatters={{
+                  formatWeekdayName: (date) =>
+                    date.toLocaleDateString("ro-RO", {
+                      weekday: "short",
+                    }),
+                }}
+              />
+            </div>
+            <div className="max-h-72 overflow-y-auto border-t p-6 md:h-full md:max-h-[26rem] md:border-t-0 md:border-l">
+              <div className="flex flex-col gap-2">
+                {timeSlots.map((slot) => {
+                  const isSelected = appointmentTime === slot
+                  return (
+                    <Button
+                      key={slot}
+                      variant={isSelected ? "default" : "outline"}
+                      onClick={() => toggleTimeSlot(slot)}
+                      disabled={!appointmentDate}
+                      className="w-full justify-center shadow-none"
+                    >
+                      {slot}
+                    </Button>
+                  )
+                })}
+              </div>
+              {!appointmentDate && (
+                <p className="text-muted-foreground mt-4 text-xs">
+                  Selectează mai întâi o zi pentru a activa intervalele orare.
+                </p>
+              )}
+            </div>
+          </CardContent>
+          <CardFooter className="flex flex-col gap-3 border-t px-6 py-5 text-sm md:flex-row md:items-center md:justify-between">
+            {formattedSelection && appointmentTime ? (
+              <span>
+                Programarea este setată pentru <span className="font-medium">{formattedSelection}</span> la
+                <span className="font-medium"> {appointmentTime}</span>.
+              </span>
+            ) : (
+              <span className="text-muted-foreground">
+                Selectează o zi și un interval orar pentru a continua.
+              </span>
+            )}
+            <div className="text-muted-foreground text-xs">
+              Datele marcate sunt deja rezervate.
+            </div>
+          </CardFooter>
+        </Card>
+      </section>
+    )
+  }
+
   return (
     <>
       <div className="space-y-6 md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:items-start md:gap-6 md:space-y-0">
@@ -515,7 +681,11 @@ export default function BookingStepper() {
 
           <CardContent className="space-y-10">
             {currentGroup.map((stepId) =>
-              stepId === SPECIALIST_STEP_ID ? renderSpecialistStep() : renderStep(stepId)
+              stepId === SPECIALIST_STEP_ID
+                ? renderSpecialistStep()
+                : stepId === APPOINTMENT_STEP_ID
+                  ? renderAppointmentStep()
+                  : renderStep(stepId)
             )}
           </CardContent>
 
@@ -573,6 +743,16 @@ export default function BookingStepper() {
                     <span>Cost total</span>
                     <span className="font-semibold">{formatPrice(summary.totalPrice)}</span>
                   </div>
+                  {appointmentDate && appointmentTime && (
+                    <div className="flex flex-col gap-1 pt-1 text-xs text-muted-foreground">
+                      <span className="font-medium uppercase tracking-wide text-[0.7rem] text-foreground">
+                        Programare
+                      </span>
+                      <span className="text-sm text-foreground">
+                        {format(appointmentDate, "d MMM yyyy", { locale: ro })} • {appointmentTime}
+                      </span>
+                    </div>
+                  )}
                   {Object.keys(selectedSpecialists).length > 0 && (
                     <div className="flex flex-col gap-1 pt-1 text-xs text-muted-foreground">
                       {specialistCategoryIds
