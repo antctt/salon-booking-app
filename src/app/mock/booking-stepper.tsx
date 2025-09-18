@@ -390,91 +390,92 @@ export default function BookingStepper() {
 
   return (
     <>
-      <Card className="shadow-lg">
-      <CardHeader className="gap-2">
-        <CardTitle className="text-2xl font-semibold">Planifică vizita</CardTitle>
-        <CardDescription>
-          Navighează pașii de rezervare pentru a selecta serviciile dorite și specialistul potrivit.
-        </CardDescription>
-      </CardHeader>
+      <div className="space-y-6 md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:items-start md:gap-6 md:space-y-0">
+        <Card className="shadow-lg">
+          <CardHeader className="gap-2">
+            <CardTitle className="text-2xl font-semibold">Planifică vizita</CardTitle>
+            <CardDescription>
+              Navighează pașii de rezervare pentru a selecta serviciile dorite și specialistul potrivit.
+            </CardDescription>
+          </CardHeader>
 
-      <CardContent className="md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:gap-10">
-        <div className="space-y-10">
-          {currentGroup.map((stepId) =>
-            stepId === SPECIALIST_STEP_ID ? renderSpecialistStep() : renderStep(stepId)
-          )}
-        </div>
+          <CardContent className="space-y-10">
+            {currentGroup.map((stepId) =>
+              stepId === SPECIALIST_STEP_ID ? renderSpecialistStep() : renderStep(stepId)
+            )}
+          </CardContent>
 
-        <aside className="mt-8 md:mt-0">
-          <Card className="border-dashed">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Rezumatul tău</CardTitle>
-              <CardDescription>
-                Serviciile finale se adaugă automat pe măsură ce le selectezi.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {summary.services.length === 0 ? (
-                <p className="text-muted-foreground text-sm">
-                  Selectează servicii pentru a vedea detaliile aici.
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  <div className="max-h-64 space-y-3 overflow-y-auto pr-2">
-                    {summary.services.map((item) => (
-                      <div key={item.optionId} className="rounded-lg bg-muted/40 p-3">
-                        <p className="text-sm font-medium">{item.optionLabel}</p>
-                        <p className="text-muted-foreground text-xs">
-                          {formatDuration(item.durationMinutes)} • {formatPrice(item.price)}
-                        </p>
-                      </div>
-                    ))}
+          <CardFooter className="flex flex-wrap justify-between gap-3">
+            <Button variant="ghost" onClick={goBack} disabled={currentGroupIndex === 0}>
+              Înapoi
+            </Button>
+            <Button
+              ref={primaryButtonRef}
+              onClick={goForward}
+              disabled={!canContinue}
+              className="min-w-48"
+            >
+              {isFinalGroup ? "Confirmă programarea" : "Continuă"}
+            </Button>
+          </CardFooter>
+        </Card>
+
+        <Card className="border-dashed md:self-start">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Rezumatul tău</CardTitle>
+            <CardDescription>
+              Serviciile finale se adaugă automat pe măsură ce le selectezi.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {summary.services.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                Selectează servicii pentru a vedea detaliile aici.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                <div className="max-h-64 space-y-3 overflow-y-auto pr-2">
+                  {summary.services.map((item) => (
+                    <div
+                      key={item.optionId}
+                      className="rounded-2xl border border-border bg-card p-4 text-left shadow-sm"
+                    >
+                      <p className="text-sm font-medium">{item.optionLabel}</p>
+                      <p className="text-muted-foreground text-xs">
+                        {formatDuration(item.durationMinutes)} • {formatPrice(item.price)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t" />
+                <div className="space-y-1 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span>Durată totală</span>
+                    <span className="font-semibold">
+                      {formatDuration(summary.totalDurationMinutes)}
+                    </span>
                   </div>
-                  <div className="border-t" />
-                  <div className="space-y-1 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span>Durată totală</span>
-                      <span className="font-semibold">
-                        {formatDuration(summary.totalDurationMinutes)}
+                  <div className="flex items-center justify-between">
+                    <span>Cost total</span>
+                    <span className="font-semibold">{formatPrice(summary.totalPrice)}</span>
+                  </div>
+                  {selectedSpecialist && (
+                    <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground">
+                      <span>Specialist</span>
+                      <span>
+                        {
+                          frizerieSpecialists.find((item) => item.id === selectedSpecialist)?.name ??
+                          "—"
+                        }
                       </span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span>Cost total</span>
-                      <span className="font-semibold">{formatPrice(summary.totalPrice)}</span>
-                    </div>
-                    {selectedSpecialist && (
-                      <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground">
-                        <span>Specialist</span>
-                        <span>
-                          {
-                            frizerieSpecialists.find((item) => item.id === selectedSpecialist)?.name ??
-                            "—"
-                          }
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </aside>
-      </CardContent>
-
-        <CardFooter className="flex flex-wrap justify-between gap-3">
-          <Button variant="ghost" onClick={goBack} disabled={currentGroupIndex === 0}>
-            Înapoi
-          </Button>
-          <Button
-            ref={primaryButtonRef}
-            onClick={goForward}
-            disabled={!canContinue}
-            className="min-w-48"
-          >
-            {isFinalGroup ? "Confirmă programarea" : "Continuă"}
-          </Button>
-        </CardFooter>
-      </Card>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
       {showFloatingAction && (
         <Button
           className="fixed bottom-5 right-5 z-40 rounded-full px-6 py-5 shadow-lg md:hidden"
