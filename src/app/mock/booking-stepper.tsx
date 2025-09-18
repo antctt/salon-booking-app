@@ -164,7 +164,8 @@ export default function BookingStepper() {
       let nextSelected = prevSelected
 
       if (step.selectionType === "single") {
-        nextSelected = [optionId]
+        const alreadySelected = prevSelected[0] === optionId
+        nextSelected = alreadySelected ? [] : [optionId]
       } else {
         const exists = prevSelected.includes(optionId)
         nextSelected = exists
@@ -307,11 +308,17 @@ export default function BookingStepper() {
               role="radio"
               aria-checked={isSelected}
               tabIndex={0}
-              onClick={() => setSelectedSpecialist(specialist.id)}
+              onClick={() =>
+                setSelectedSpecialist((prev) =>
+                  prev === specialist.id ? null : specialist.id
+                )
+              }
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault()
-                  setSelectedSpecialist(specialist.id)
+                  setSelectedSpecialist((prev) =>
+                    prev === specialist.id ? null : specialist.id
+                  )
                 }
               }}
               className={cn(
