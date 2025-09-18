@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { format } from "date-fns"
 import { ro } from "date-fns/locale"
 import {
@@ -130,8 +130,14 @@ export default function BookingStepper() {
   const [currentGroupIndex, setCurrentGroupIndex] = useState(0)
   const [selectedOptions, setSelectedOptions] = useState<SelectedOptionsMap>({})
   const [selectedSpecialist, setSelectedSpecialist] = useState<string | null>(null)
+  const [isMobile, setIsMobile] = useState(false)
+  const [isPrimaryButtonInView, setPrimaryButtonInView] = useState(true)
+  const primaryButtonRef = useRef<HTMLButtonElement | null>(null)
 
-  const currentGroup = stepGroups[currentGroupIndex] ?? []
+  const currentGroup = useMemo(
+    () => stepGroups[currentGroupIndex] ?? [],
+    [stepGroups, currentGroupIndex]
+  )
   const isFinalGroup = currentGroup.includes(SPECIALIST_STEP_ID)
   const totalSteps = Math.max(stepGroups.length - 1, 0)
 
@@ -139,6 +145,65 @@ export default function BookingStepper() {
     () => calculateBookingSummary(selectedOptions, frizerieFlow, optionIndex),
     [selectedOptions, optionIndex]
   )
+
+  const canContinue = useMemo(() => {
+    if (isFinalGroup) {
+      return summary.services.length > 0 && Boolean(selectedSpecialist)
+    }
+
+    if (currentGroup.length === 0) return false
+
+    return currentGroup.every((stepId) => {
+      if (stepId === SPECIALIST_STEP_ID) return true
+      const step = frizerieFlow.steps[stepId]
+      if (!step) return false
+      const selected = selectedOptions[stepId] ?? []
+      if (step.selectionType === "single") {
+        return selected.length === 1
+      }
+      return selected.length > 0
+    })
+  }, [
+    currentGroup,
+    isFinalGroup,
+    selectedOptions,
+    selectedSpecialist,
+    summary.services.length,
+  ])
+
+  useEffect(() => {
+    const updateViewportMatch = () => {
+      if (typeof window === "undefined") return
+      setIsMobile(window.innerWidth <= 767)
+    }
+
+    updateViewportMatch()
+    if (typeof window === "undefined") {
+      return
+    }
+
+    window.addEventListener("resize", updateViewportMatch)
+    return () => window.removeEventListener("resize", updateViewportMatch)
+  }, [])
+
+  useEffect(() => {
+    const button = primaryButtonRef.current
+    if (!button) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setPrimaryButtonInView(entry.isIntersecting),
+      { threshold: 0.1 }
+    )
+
+    observer.observe(button)
+
+    return () => {
+      observer.unobserve(button)
+      observer.disconnect()
+    }
+  }, [currentGroupIndex])
+
+  const showFloatingAction = isMobile && canContinue && !isPrimaryButtonInView
 
   const ensureGroupsTrimmed = () => {
     setStepGroups((prev) => {
@@ -227,25 +292,6 @@ export default function BookingStepper() {
       setStepGroups([...trimmedGroups, [SPECIALIST_STEP_ID]])
     }
     setCurrentGroupIndex((prev) => prev + 1)
-  }
-
-  const canProceed = () => {
-    if (isFinalGroup) {
-      return summary.services.length > 0 && Boolean(selectedSpecialist)
-    }
-
-    if (currentGroup.length === 0) return false
-
-    return currentGroup.every((stepId) => {
-      if (stepId === SPECIALIST_STEP_ID) return true
-      const step = frizerieFlow.steps[stepId]
-      if (!step) return false
-      const selected = selectedOptions[stepId] ?? []
-      if (step.selectionType === "single") {
-        return selected.length === 1
-      }
-      return selected.length > 0
-    })
   }
 
   const renderStep = (stepId: string) => {
@@ -346,7 +392,8 @@ export default function BookingStepper() {
   )
 
   return (
-    <Card className="shadow-lg">
+    <>
+      <Card className="shadow-lg">
       <CardHeader className="gap-2">
         <div className="flex items-center gap-2 text-primary text-sm font-medium">
           <Sparkles className="size-4" aria-hidden="true" />
@@ -424,14 +471,29 @@ export default function BookingStepper() {
         </aside>
       </CardContent>
 
-      <CardFooter className="flex flex-wrap justify-between gap-3">
-        <Button variant="ghost" onClick={goBack} disabled={currentGroupIndex === 0}>
-          Înapoi
+        <CardFooter className="flex flex-wrap justify-between gap-3">
+          <Button variant="ghost" onClick={goBack} disabled={currentGroupIndex === 0}>
+            Înapoi
+          </Button>
+          <Button
+            ref={primaryButtonRef}
+            onClick={goForward}
+            disabled={!canContinue}
+            className="min-w-48"
+          >
+            {isFinalGroup ? "Confirmă programarea" : "Continuă"}
+          </Button>
+        </CardFooter>
+      </Card>
+      {showFloatingAction && (
+        <Button
+          className="fixed bottom-5 right-5 z-40 rounded-full px-6 py-5 shadow-lg md:hidden"
+          onClick={goForward}
+          aria-label={isFinalGroup ? "Confirmă programarea" : "Continuă"}
+        >
+          {isFinalGroup ? "Confirmă" : "Continuă"}
         </Button>
-        <Button onClick={goForward} disabled={!canProceed()} className="min-w-48">
-          {isFinalGroup ? "Confirmă programarea" : "Continuă"}
-        </Button>
-      </CardFooter>
-    </Card>
+      )}
+    </>
   )
 }
