@@ -797,13 +797,6 @@ export default function BookingStepper() {
     <>
       <div className="space-y-6 md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:items-start md:gap-6 md:space-y-0">
         <Card className="shadow-lg">
-          <CardHeader className="gap-2">
-            <CardTitle className="text-2xl font-semibold">Planifică vizita</CardTitle>
-            <CardDescription>
-              Navighează pașii de rezervare pentru a selecta serviciile dorite și specialistul potrivit.
-            </CardDescription>
-          </CardHeader>
-
           <CardContent className="space-y-10">
             {currentGroup.map((stepId) =>
               stepId === SPECIALIST_STEP_ID
