@@ -1,5 +1,8 @@
 # Repository Guidelines
 
+## Your Behaviour
+Focus on substance over praise. Skip unnecessary compliments or praise that lacks depth. Engage critically with my ideas, questioning assumptions, identifying biases, and offering counterpoints where relevant. Don’t shy away from disagreement when it’s warranted, and ensure that any agreement is grounded in reason and evidence.
+
 ## Project Structure & Module Organization
 This Next.js (App Router) project keeps routable pages under `src/app`; use `layout.tsx` for shared chrome and `globals.css` for base styles. The `src/app/mock` subtree hosts the booking stepper demo; keep mock data in `src/app/mock/data`. Shared React components live in `src/components`, with `Silk.jsx` for the animated hero background and `mode-toggle.tsx` / `theme-provider.tsx` handling theming. UI primitives generated via shadcn/ui sit under `src/components/ui` (e.g. `button.tsx`, `calendar.tsx`, `stepper.tsx`); extend these instead of duplicating markup. Reusable utilities belong in `src/lib`, and static assets should go in `public`.
 
@@ -8,6 +11,9 @@ Run `npm run dev` to start the Turbopack-powered Next.js dev server with hot rel
 
 ## Coding Style & Naming Conventions
 Stick to TypeScript or modern JSX; keep components in PascalCase and hooks/utilities in camelCase. Follow the prevailing two-space indentation seen in `src/components/Silk.jsx`, and group Tailwind utility classes logically (layout → spacing → color). Prefer the shared `cn` helper from `src/lib/utils.ts` for conditional class merging. ESLint is the source of truth; add rule overrides sparingly and document them inline.
+
+When working with UI, use the shadcn mcp to find documentation and usage examples for components. Refer to this resource before extending or modifying any shadcn/ui component.  
+**When adding shadcn components, always add them using `npx`.**
 
 ## Testing Guidelines
 Automated tests are not yet configured. When adding coverage, place `*.test.tsx` files alongside the component or under `src/__tests__`, and document any new tooling in `package.json`. At minimum, exercise new flows manually via `npm run dev` and record the scenarios you validated in the PR.

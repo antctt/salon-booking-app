@@ -150,13 +150,9 @@ export default function BookingStepper() {
   })
 
   const timeSlots = useMemo(() => {
-    return Array.from({ length: 37 }, (_, index) => {
-      const totalMinutes = index * 15
-      const hour = Math.floor(totalMinutes / 60) + 9
-      const minute = totalMinutes % 60
-      return `${hour.toString().padStart(2, "0")}:${minute
-        .toString()
-        .padStart(2, "0")}`
+    return Array.from({ length: 11 }, (_, index) => {
+      const hour = index + 10
+      return `${hour.toString().padStart(2, "0")}:00`
     })
   }, [])
 
