@@ -12,7 +12,7 @@ Run `npm run dev` to start the Turbopack-powered Next.js dev server with hot rel
 ## Coding Style & Naming Conventions
 Stick to TypeScript or modern JSX; keep components in PascalCase and hooks/utilities in camelCase. Follow the prevailing two-space indentation seen in `src/components/Silk.jsx`, and group Tailwind utility classes logically (layout → spacing → color). Prefer the shared `cn` helper from `src/lib/utils.ts` for conditional class merging. ESLint is the source of truth; add rule overrides sparingly and document them inline.
 
-When working with UI, use the shadcn mcp to find documentation and usage examples for components. Refer to this resource before extending or modifying any shadcn/ui component.  
+When planning, modifying UI, use the shadcn mcp to find documentation and usage examples for components. Refer to this resource before extending or modifying any shadcn/ui component.  
 **When adding shadcn components, always add them using `npx`.**
 
 ## Testing Guidelines

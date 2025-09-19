@@ -23,6 +23,14 @@ import {
 import { Calendar } from "@/components/ui/calendar"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 
 import {
@@ -43,6 +51,13 @@ const SPECIALIST_STEP_ID = "specialist-selection"
 const APPOINTMENT_STEP_ID = "appointment-scheduling"
 const CUSTOMER_DETAILS_STEP_ID = "customer-details"
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+const RECURRENCE_OPTIONS = [
+  { value: "weekly", label: "În fiecare săptămână" },
+  { value: "biweekly", label: "La 2 săptămâni" },
+  { value: "monthly", label: "În fiecare lună" },
+  { value: "bimonthly", label: "La 2 luni" },
+]
 
 const formatDuration = (minutes: number) => {
   const hours = Math.floor(minutes / 60)
@@ -140,6 +155,9 @@ export default function BookingStepper() {
   const primaryButtonRef = useRef<HTMLButtonElement | null>(null)
   const [appointmentDate, setAppointmentDate] = useState<Date | undefined>()
   const [appointmentTime, setAppointmentTime] = useState<string | null>(null)
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState(RECURRENCE_OPTIONS[0]?.value ?? "weekly")
+  const [isWaitlistEnabled, setIsWaitlistEnabled] = useState(false)
   const [customerName, setCustomerName] = useState("")
   const [customerPhone, setCustomerPhone] = useState("")
   const [customerEmail, setCustomerEmail] = useState("")
@@ -224,7 +242,15 @@ export default function BookingStepper() {
     }
 
     if (isAppointmentGroup) {
-      return Boolean(appointmentDate && appointmentTime)
+      if (!(appointmentDate && appointmentTime)) {
+        return false
+      }
+
+      if (isRecurring && !recurrenceFrequency) {
+        return false
+      }
+
+      return true
     }
 
     if (isSpecialistGroup) {
@@ -265,6 +291,8 @@ export default function BookingStepper() {
     isAppointmentGroup,
     isCustomerDetailsGroup,
     isSpecialistGroup,
+    isRecurring,
+    recurrenceFrequency,
     specialistCategoryIds,
     selectedOptions,
     selectedSpecialists,
@@ -333,11 +361,32 @@ export default function BookingStepper() {
       group.includes(APPOINTMENT_STEP_ID)
     )
 
-    if (!hasAppointmentStep && (appointmentDate || appointmentTime)) {
+    if (!hasAppointmentStep && (appointmentDate || appointmentTime || isRecurring || isWaitlistEnabled)) {
       setAppointmentDate(undefined)
       setAppointmentTime(null)
+      setIsRecurring(false)
+      setIsWaitlistEnabled(false)
+      setRecurrenceFrequency(RECURRENCE_OPTIONS[0]?.value ?? "weekly")
     }
-  }, [appointmentDate, appointmentTime, stepGroups])
+  }, [
+    appointmentDate,
+    appointmentTime,
+    isRecurring,
+    isWaitlistEnabled,
+    stepGroups,
+  ])
+
+  useEffect(() => {
+    if (!appointmentDate || !appointmentTime) {
+      if (isRecurring) {
+        setIsRecurring(false)
+        setRecurrenceFrequency(RECURRENCE_OPTIONS[0]?.value ?? "weekly")
+      }
+      if (isWaitlistEnabled) {
+        setIsWaitlistEnabled(false)
+      }
+    }
+  }, [appointmentDate, appointmentTime, isRecurring, isWaitlistEnabled])
 
   const showFloatingAction = isMobile && canContinue && !isPrimaryButtonInView
 
@@ -414,6 +463,11 @@ export default function BookingStepper() {
         appointment: {
           date: appointmentDate?.toISOString(),
           time: appointmentTime,
+          recurrence: isRecurring ? recurrenceFrequency : null,
+          recurrenceLabel: isRecurring
+            ? RECURRENCE_OPTIONS.find((option) => option.value === recurrenceFrequency)?.label ?? null
+            : null,
+          waitlistEnabled: isWaitlistEnabled,
         },
         customer: {
           name: customerName.trim(),
@@ -623,6 +677,9 @@ export default function BookingStepper() {
     const formattedSelection = appointmentDate
       ? format(appointmentDate, "EEEE, d MMMM yyyy", { locale: ro })
       : null
+    const recurrenceSummaryLabel = RECURRENCE_OPTIONS.find(
+      (option) => option.value === recurrenceFrequency
+    )?.label
 
     const toggleTimeSlot = (slot: string) => {
       setAppointmentTime((prev) => (prev === slot ? null : slot))
@@ -687,20 +744,105 @@ export default function BookingStepper() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-3 border-t px-6 py-5 text-sm md:flex-row md:items-center md:justify-between">
-            {formattedSelection && appointmentTime ? (
-              <span>
-                Programarea este setată pentru <span className="font-medium">{formattedSelection}</span> la
-                <span className="font-medium"> {appointmentTime}</span>.
-              </span>
-            ) : (
-              <span className="text-muted-foreground">
-                Selectează o zi și un interval orar pentru a continua.
-              </span>
-            )}
+            <div className="flex flex-col gap-1">
+              {formattedSelection && appointmentTime ? (
+                <span>
+                  Programarea este setată pentru <span className="font-medium">{formattedSelection}</span> la
+                  <span className="font-medium"> {appointmentTime}</span>.
+                </span>
+              ) : (
+                <span className="text-muted-foreground">
+                  Selectează o zi și un interval orar pentru a continua.
+                </span>
+              )}
+              {formattedSelection && appointmentTime && isRecurring && recurrenceSummaryLabel && (
+                <span className="text-muted-foreground text-xs">
+                  Repetare: {recurrenceSummaryLabel.toLowerCase()}.
+                </span>
+              )}
+              {formattedSelection && appointmentTime && isWaitlistEnabled && (
+                <span className="text-muted-foreground text-xs">
+                  Lista de așteptare este activă pentru această programare.
+                </span>
+              )}
+            </div>
             <div className="text-muted-foreground text-xs">
               Datele marcate sunt deja rezervate.
             </div>
           </CardFooter>
+        </Card>
+
+        <Card className="border border-dashed bg-muted/20">
+          <CardContent className="space-y-4">
+            <div className="flex items-start justify-between gap-6">
+              <div className="space-y-1">
+                <p className="font-medium">Repetă rezervarea</p>
+                <p className="text-muted-foreground text-xs">
+                  Setează o frecvență pentru ședințe recurente.
+                </p>
+              </div>
+              <Switch
+                id="appointment-repeat"
+                checked={isRecurring}
+                onCheckedChange={(checked) => {
+                  setIsRecurring(checked)
+                  if (!checked) {
+                    setRecurrenceFrequency(RECURRENCE_OPTIONS[0]?.value ?? "weekly")
+                  }
+                }}
+                disabled={!appointmentDate || !appointmentTime}
+              />
+            </div>
+            {isRecurring && (
+              <div className="space-y-2">
+                <Label htmlFor="appointment-repeat-frequency" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Frecvență
+                </Label>
+                <Select
+                  value={recurrenceFrequency}
+                  onValueChange={setRecurrenceFrequency}
+                >
+                  <SelectTrigger id="appointment-repeat-frequency" className="h-9 text-sm">
+                    <SelectValue placeholder="Alege frecvența" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RECURRENCE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-muted-foreground text-xs">
+                  Programarea se repetă {RECURRENCE_OPTIONS.find((option) => option.value === recurrenceFrequency)?.label?.toLowerCase()}.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border border-dashed bg-muted/20">
+          <CardContent className="space-y-3">
+            <div className="flex items-start justify-between gap-6">
+              <div className="space-y-1">
+                <p className="font-medium">Listă de așteptare</p>
+                <p className="text-muted-foreground text-xs">
+                  Primești notificare dacă apare un loc mai devreme.
+                </p>
+              </div>
+              <Switch
+                id="appointment-waitlist"
+                checked={isWaitlistEnabled}
+                onCheckedChange={(checked) => setIsWaitlistEnabled(checked)}
+                disabled={!appointmentDate || !appointmentTime}
+              />
+            </div>
+            {isWaitlistEnabled && (
+              <div className="rounded-lg border border-dashed bg-background/60 p-3 text-xs text-muted-foreground">
+                Te vom anunța dacă se eliberează un interval mai devreme pentru serviciile selectate.
+              </div>
+            )}
+          </CardContent>
         </Card>
       </section>
     )
