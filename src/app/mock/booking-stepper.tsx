@@ -21,6 +21,8 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Calendar } from "@/components/ui/calendar"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 
 import {
@@ -39,6 +41,8 @@ import {
 
 const SPECIALIST_STEP_ID = "specialist-selection"
 const APPOINTMENT_STEP_ID = "appointment-scheduling"
+const CUSTOMER_DETAILS_STEP_ID = "customer-details"
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const formatDuration = (minutes: number) => {
   const hours = Math.floor(minutes / 60)
@@ -136,6 +140,14 @@ export default function BookingStepper() {
   const primaryButtonRef = useRef<HTMLButtonElement | null>(null)
   const [appointmentDate, setAppointmentDate] = useState<Date | undefined>()
   const [appointmentTime, setAppointmentTime] = useState<string | null>(null)
+  const [customerName, setCustomerName] = useState("")
+  const [customerPhone, setCustomerPhone] = useState("")
+  const [customerEmail, setCustomerEmail] = useState("")
+  const [customerTouched, setCustomerTouched] = useState({
+    name: false,
+    phone: false,
+    email: false,
+  })
 
   const timeSlots = useMemo(() => {
     return Array.from({ length: 37 }, (_, index) => {
@@ -179,7 +191,8 @@ export default function BookingStepper() {
   )
   const isSpecialistGroup = currentGroup.includes(SPECIALIST_STEP_ID)
   const isAppointmentGroup = currentGroup.includes(APPOINTMENT_STEP_ID)
-  const isFinalGroup = isAppointmentGroup
+  const isCustomerDetailsGroup = currentGroup.includes(CUSTOMER_DETAILS_STEP_ID)
+  const isFinalGroup = isCustomerDetailsGroup
   const summary = useMemo(
     () => calculateBookingSummary(selectedOptions, frizerieFlow, optionIndex),
     [selectedOptions, optionIndex]
@@ -204,6 +217,16 @@ export default function BookingStepper() {
   }, [selectedOptions, optionIndex])
 
   const canContinue = useMemo(() => {
+    if (isCustomerDetailsGroup) {
+      const trimmedEmail = customerEmail.trim()
+      const hasEmailError = trimmedEmail.length > 0 && !EMAIL_REGEX.test(trimmedEmail)
+      return (
+        Boolean(customerName.trim()) &&
+        Boolean(customerPhone.trim()) &&
+        !hasEmailError
+      )
+    }
+
     if (isAppointmentGroup) {
       return Boolean(appointmentDate && appointmentTime)
     }
@@ -240,7 +263,11 @@ export default function BookingStepper() {
     appointmentDate,
     appointmentTime,
     currentGroup,
+    customerName,
+    customerEmail,
+    customerPhone,
     isAppointmentGroup,
+    isCustomerDetailsGroup,
     isSpecialistGroup,
     specialistCategoryIds,
     selectedOptions,
@@ -392,6 +419,11 @@ export default function BookingStepper() {
           date: appointmentDate?.toISOString(),
           time: appointmentTime,
         },
+        customer: {
+          name: customerName.trim(),
+          phone: customerPhone.trim(),
+          email: customerEmail.trim() || null,
+        },
       })
       return
     }
@@ -401,6 +433,16 @@ export default function BookingStepper() {
     if (isSpecialistGroup) {
       if (!trimmedGroups.some((group) => group.includes(APPOINTMENT_STEP_ID))) {
         setStepGroups([...trimmedGroups, [APPOINTMENT_STEP_ID]])
+      } else {
+        setStepGroups(trimmedGroups)
+      }
+      setCurrentGroupIndex((prev) => prev + 1)
+      return
+    }
+
+    if (isAppointmentGroup) {
+      if (!trimmedGroups.some((group) => group.includes(CUSTOMER_DETAILS_STEP_ID))) {
+        setStepGroups([...trimmedGroups, [CUSTOMER_DETAILS_STEP_ID]])
       } else {
         setStepGroups(trimmedGroups)
       }
@@ -668,6 +710,89 @@ export default function BookingStepper() {
     )
   }
 
+  const renderCustomerDetailsStep = () => {
+    const trimmedEmail = customerEmail.trim()
+    const nameError = customerTouched.name && customerName.trim() === ""
+      ? "Numele este obligatoriu."
+      : null
+    const phoneError = customerTouched.phone && customerPhone.trim() === ""
+      ? "Numărul de telefon este obligatoriu."
+      : null
+    const emailError =
+      customerTouched.email && trimmedEmail !== "" && !EMAIL_REGEX.test(trimmedEmail)
+        ? "Introdu o adresă de email validă."
+        : null
+
+    const markTouched = (field: "name" | "phone" | "email") => {
+      setCustomerTouched((prev) => ({ ...prev, [field]: true }))
+    }
+
+    return (
+      <section key={CUSTOMER_DETAILS_STEP_ID} className="space-y-6">
+        <header className="space-y-1">
+          <h2 className="text-xl font-semibold">Detalii client</h2>
+          <p className="text-muted-foreground text-sm">
+            Completează datele de contact pentru a finaliza programarea. Câmpurile marcate cu * sunt obligatorii.
+          </p>
+        </header>
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="md:col-span-2 space-y-2">
+            <Label htmlFor="customer-name" className="text-sm font-medium">
+              Nume complet <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="customer-name"
+              value={customerName}
+              onChange={(event) => setCustomerName(event.target.value)}
+              onBlur={() => markTouched("name")}
+              placeholder="Ex: Ana Popescu"
+              aria-required="true"
+              aria-invalid={Boolean(nameError)}
+              autoComplete="name"
+              required
+            />
+            {nameError && <p className="text-destructive text-xs">{nameError}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="customer-phone" className="text-sm font-medium">
+              Telefon <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="customer-phone"
+              type="tel"
+              value={customerPhone}
+              onChange={(event) => setCustomerPhone(event.target.value)}
+              onBlur={() => markTouched("phone")}
+              placeholder="Ex: 0712 345 678"
+              aria-required="true"
+              aria-invalid={Boolean(phoneError)}
+              autoComplete="tel"
+              required
+            />
+            {phoneError && <p className="text-destructive text-xs">{phoneError}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="customer-email" className="text-sm font-medium">
+              Email
+              <span className="text-muted-foreground text-xs font-normal"> (opțional)</span>
+            </Label>
+            <Input
+              id="customer-email"
+              type="email"
+              value={customerEmail}
+              onChange={(event) => setCustomerEmail(event.target.value)}
+              onBlur={() => markTouched("email")}
+              placeholder="Ex: ana@example.com"
+              aria-invalid={Boolean(emailError)}
+              autoComplete="email"
+            />
+            {emailError && <p className="text-destructive text-xs">{emailError}</p>}
+          </div>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <>
       <div className="space-y-6 md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:items-start md:gap-6 md:space-y-0">
@@ -685,7 +810,9 @@ export default function BookingStepper() {
                 ? renderSpecialistStep()
                 : stepId === APPOINTMENT_STEP_ID
                   ? renderAppointmentStep()
-                  : renderStep(stepId)
+                  : stepId === CUSTOMER_DETAILS_STEP_ID
+                    ? renderCustomerDetailsStep()
+                    : renderStep(stepId)
             )}
           </CardContent>
 
@@ -751,6 +878,18 @@ export default function BookingStepper() {
                       <span className="text-sm text-foreground">
                         {format(appointmentDate, "d MMM yyyy", { locale: ro })} • {appointmentTime}
                       </span>
+                    </div>
+                  )}
+                  {(customerName.trim() || customerPhone.trim() || customerEmail.trim()) && (
+                    <div className="flex flex-col gap-1 pt-1 text-xs text-muted-foreground">
+                      <span className="font-medium uppercase tracking-wide text-[0.7rem] text-foreground">
+                        Client
+                      </span>
+                      {customerName.trim() && (
+                        <span className="text-sm text-foreground">{customerName.trim()}</span>
+                      )}
+                      {customerPhone.trim() && <span>{customerPhone.trim()}</span>}
+                      {customerEmail.trim() && <span>{customerEmail.trim()}</span>}
                     </div>
                   )}
                   {Object.keys(selectedSpecialists).length > 0 && (
