@@ -637,7 +637,7 @@ export default function BookingStepper() {
           </p>
         </header>
 
-        <Card className="border shadow-sm">
+        <Card className="border shadow-sm py-0 gap-0">
           <CardContent className="grid gap-0 p-0 md:grid-cols-[minmax(0,1fr)_minmax(0,240px)] md:min-h-[26rem]">
             <div className="border-b p-6 md:border-b-0 md:border-r md:h-full">
               <Calendar
@@ -662,7 +662,7 @@ export default function BookingStepper() {
                 }}
               />
             </div>
-            <div className="max-h-72 overflow-y-auto border-t p-6 md:h-full md:max-h-[26rem] md:border-t-0 md:border-l">
+            <div className="max-h-72 overflow-y-auto border-t p-6 md:h-full md:max-h-[26rem] md:border-t-0">
               <div className="flex flex-col gap-2">
                 {timeSlots.map((slot) => {
                   const isSelected = appointmentTime === slot
