@@ -55,6 +55,11 @@ export default function MockBookingPage() {
         <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-10 px-4 py-12">
           <section className="mx-auto flex max-w-3xl flex-col items-center gap-6 text-center text-white">
             <h1 className="text-5xl font-bold tracking-tight">Glow &amp; Co. Salon</h1>
+            <p className="max-w-2xl text-balance text-lg font-medium leading-relaxed text-white/90">
+              Experience refined self‑care rooted in craft. From precision cuts and luminous color to restorative
+              treatments and tailored styling, our artists blend technique with creativity to help you look—and feel—
+              unmistakably you.
+            </p>
             <div className="flex flex-wrap items-center justify-center gap-4">
               <Button
                 size="sm"
