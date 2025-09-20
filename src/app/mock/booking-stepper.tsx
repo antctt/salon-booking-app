@@ -81,6 +81,8 @@ const formatPrice = (value: number) =>
     minimumFractionDigits: 0,
   }).format(value)
 
+type ConfirmationStatus = "idle" | "success"
+
 interface OptionCardProps {
   option: FlowOption
   selectionType: FlowSelectionType
@@ -165,6 +167,41 @@ export default function BookingStepper() {
     name: false,
     phone: false,
     email: false,
+  })
+  const [confirmationStatus, setConfirmationStatus] = useState<ConfirmationStatus>("idle")
+
+  const trimmedCustomerPhone = useMemo(() => customerPhone.trim(), [customerPhone])
+  const appointmentConfirmationLabel = useMemo(() => {
+    if (!appointmentDate || !appointmentTime) {
+      return null
+    }
+    return `${format(appointmentDate, "EEEE, d MMMM yyyy", { locale: ro })} la ${appointmentTime}`
+  }, [appointmentDate, appointmentTime])
+  const confirmationContactMessage = useMemo(() => {
+    if (trimmedCustomerPhone) {
+      return {
+        prefix: "Primești un mesaj pe WhatsApp la",
+        highlight: trimmedCustomerPhone,
+        suffix: "cu detaliile programării.",
+      }
+    }
+    return {
+      prefix: "Te vom contacta în curând pentru detalii suplimentare.",
+      highlight: null,
+      suffix: null,
+    }
+  }, [trimmedCustomerPhone])
+  const confirmationSnapshotRef = useRef({
+    selectedOptions,
+    selectedSpecialists,
+    appointmentDate,
+    appointmentTime,
+    isRecurring,
+    recurrenceFrequency,
+    isWaitlistEnabled,
+    customerName,
+    customerPhone,
+    customerEmail,
   })
 
   const timeSlots = useMemo(() => {
@@ -325,6 +362,50 @@ export default function BookingStepper() {
   }, [specialistCategoryIds])
 
   useEffect(() => {
+    const snapshot = confirmationSnapshotRef.current
+    const hasChanges =
+      snapshot.selectedOptions !== selectedOptions ||
+      snapshot.selectedSpecialists !== selectedSpecialists ||
+      snapshot.appointmentDate !== appointmentDate ||
+      snapshot.appointmentTime !== appointmentTime ||
+      snapshot.isRecurring !== isRecurring ||
+      snapshot.recurrenceFrequency !== recurrenceFrequency ||
+      snapshot.isWaitlistEnabled !== isWaitlistEnabled ||
+      snapshot.customerName !== customerName ||
+      snapshot.customerPhone !== customerPhone ||
+      snapshot.customerEmail !== customerEmail
+
+    if (confirmationStatus === "success" && hasChanges) {
+      setConfirmationStatus("idle")
+    }
+
+    confirmationSnapshotRef.current = {
+      selectedOptions,
+      selectedSpecialists,
+      appointmentDate,
+      appointmentTime,
+      isRecurring,
+      recurrenceFrequency,
+      isWaitlistEnabled,
+      customerName,
+      customerPhone,
+      customerEmail,
+    }
+  }, [
+    appointmentDate,
+    appointmentTime,
+    confirmationStatus,
+    customerEmail,
+    customerName,
+    customerPhone,
+    isRecurring,
+    isWaitlistEnabled,
+    recurrenceFrequency,
+    selectedOptions,
+    selectedSpecialists,
+  ])
+
+  useEffect(() => {
     const updateViewportMatch = () => {
       if (typeof window === "undefined") return
       setIsMobile(window.innerWidth <= 767)
@@ -387,6 +468,12 @@ export default function BookingStepper() {
       }
     }
   }, [appointmentDate, appointmentTime, isRecurring, isWaitlistEnabled])
+
+  useEffect(() => {
+    if (!isFinalGroup && confirmationStatus === "success") {
+      setConfirmationStatus("idle")
+    }
+  }, [confirmationStatus, isFinalGroup])
 
   const showFloatingAction = isMobile && canContinue && !isPrimaryButtonInView
 
@@ -475,6 +562,7 @@ export default function BookingStepper() {
           email: customerEmail.trim() || null,
         },
       })
+      setConfirmationStatus("success")
       return
     }
 
@@ -936,6 +1024,42 @@ export default function BookingStepper() {
       <div className="space-y-6 md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:items-start md:gap-6 md:space-y-0">
         <Card className="shadow-lg">
           <CardContent className="space-y-10">
+            {isFinalGroup && confirmationStatus === "success" && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="mt-0.5 size-5 text-emerald-600" aria-hidden="true" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold leading-none">Programarea ta a fost confirmată</p>
+                    <p className="text-sm">
+                      {appointmentConfirmationLabel ? (
+                        <>
+                          Te așteptăm pe {" "}
+                          <span className="font-semibold">{appointmentConfirmationLabel}</span>.
+                        </>
+                      ) : (
+                        "Programarea este confirmată."
+                      )}
+                    </p>
+                    <p className="text-sm">
+                      {confirmationContactMessage.prefix}
+                      {confirmationContactMessage.highlight && (
+                        <>
+                          {" "}
+                          <span className="font-semibold">{confirmationContactMessage.highlight}</span>
+                          {!confirmationContactMessage.suffix && "."}
+                        </>
+                      )}
+                      {confirmationContactMessage.suffix && (
+                        <>
+                          {" "}
+                          {confirmationContactMessage.suffix}
+                        </>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
             {currentGroup.map((stepId) =>
               stepId === SPECIALIST_STEP_ID
                 ? renderSpecialistStep()
