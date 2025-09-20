@@ -584,17 +584,36 @@ export default function BookingStepper() {
         .map((item) => item.optionLabel)
         .join(", ")
 
+      const specialistSummaryList = Object.entries(selectedSpecialists)
+        .map(([categoryId, specialistId]) => {
+          const catalogEntry = specialistCatalog[categoryId]
+          if (!catalogEntry) {
+            return null
+          }
+          const specialist = catalogEntry.options.find((option) => option.id === specialistId)
+          if (!specialist) {
+            return null
+          }
+          const categoryLabel = catalogEntry.label ?? categoryId
+          return `${categoryLabel}: ${specialist.name}`
+        })
+        .filter((entry): entry is string => Boolean(entry))
+
+      const specialistSummary =
+        specialistSummaryList.length > 0 ? specialistSummaryList.join(", ") : null
+
       const messageLines = [
-        `Salut${trimmedName ? `, ${trimmedName}` : ""}! Programarea ta a fost confirmată.`,
-        appointmentConfirmationLabel
-          ? `Ne vedem pe ${appointmentConfirmationLabel}.`
+        `Salut${trimmedName ? `, ${trimmedName}` : ""}! 🌟 Confirmăm cu drag programarea ta.`,
+        appointmentConfirmationLabel ? `\n📅 Te așteptăm ${appointmentConfirmationLabel}` : null,
+        serviceSummary ? `\n✂️ Serviciu: ${serviceSummary}.` : null,
+        specialistSummary ? `👤 Specialist: ${specialistSummary}.` : null,
+        `🕒 Durata totală: ${formatDuration(summary.totalDurationMinutes)}`,
+        `📃 Cost: ${formatPrice(summary.totalPrice)}`,
+        recurrenceLabel ? `🔁 Program recurent: ${recurrenceLabel.toLowerCase()}` : null,
+        isWaitlistEnabled
+          ? "\nȚinem lista de așteptare pornită pentru o posibilă reprogramare mai rapidă. ⚡"
           : null,
-        serviceSummary ? `Servicii: ${serviceSummary}.` : null,
-        `Durată totală: ${formatDuration(summary.totalDurationMinutes)}.`,
-        `Cost estimativ: ${formatPrice(summary.totalPrice)}.`,
-        recurrenceLabel ? `Recurență: ${recurrenceLabel.toLowerCase()}.` : null,
-        isWaitlistEnabled ? "Lista de așteptare rămâne activă pentru notificări mai rapide." : null,
-        "Dacă ai întrebări, răspunde direct la acest mesaj.",
+        "\nTe rugăm să ne scrii dacă ai nevoie de orice ajustare. 🤝",
       ].filter(Boolean)
 
       try {
