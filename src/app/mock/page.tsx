@@ -176,7 +176,7 @@ export default function MockBookingPage() {
             </div>
           </section>
 
-          <BookingStepper />
+          <BookingStepper isAdminMode={isAdminMode} />
         </main>
 
         <footer className="bg-background/40 py-10 text-white backdrop-blur-md supports-[backdrop-filter:blur(0px)]:bg-background/10">

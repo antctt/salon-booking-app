@@ -47,6 +47,7 @@ import {
   deriveNextStepIds,
   type SelectedOptionsMap,
 } from "./lib/flow-utils"
+import { buildWhatsAppMessage, type MessageKind } from "./lib/messages"
 
 const SPECIALIST_STEP_ID = "specialist-selection"
 const APPOINTMENT_STEP_ID = "appointment-scheduling"
@@ -83,6 +84,8 @@ const formatPrice = (value: number) =>
   }).format(value)
 
 type ConfirmationStatus = "idle" | "success" | "error"
+type AdminMessageKind = Exclude<MessageKind, "confirmation">
+type MessageSendStatus = "idle" | "loading" | "success" | "error"
 
 interface OptionCardProps {
   option: FlowOption
@@ -147,7 +150,11 @@ const OptionCard = ({ option, selectionType, isSelected, onSelect }: OptionCardP
   )
 }
 
-export default function BookingStepper() {
+interface BookingStepperProps {
+  isAdminMode?: boolean
+}
+
+export default function BookingStepper({ isAdminMode = false }: BookingStepperProps) {
   const optionIndex = useMemo(() => buildFlowOptionIndex(frizerieFlow), [])
   const [stepGroups, setStepGroups] = useState<string[][]>([[frizerieFlow.rootStepId]])
   const [currentGroupIndex, setCurrentGroupIndex] = useState(0)
@@ -172,8 +179,18 @@ export default function BookingStepper() {
   const [confirmationStatus, setConfirmationStatus] = useState<ConfirmationStatus>("idle")
   const [confirmationError, setConfirmationError] = useState<string | null>(null)
   const [isSubmittingFinal, setIsSubmittingFinal] = useState(false)
+  const [adminMessageStatus, setAdminMessageStatus] = useState<Record<AdminMessageKind, MessageSendStatus>>({
+    reminder: "idle",
+    "thank-you": "idle",
+  })
+  const [adminMessageError, setAdminMessageError] = useState<Record<AdminMessageKind, string | null>>({
+    reminder: null,
+    "thank-you": null,
+  })
 
+  const trimmedCustomerName = useMemo(() => customerName.trim(), [customerName])
   const trimmedCustomerPhone = useMemo(() => customerPhone.trim(), [customerPhone])
+  const trimmedCustomerEmail = useMemo(() => customerEmail.trim(), [customerEmail])
   const appointmentConfirmationLabel = useMemo(() => {
     if (!appointmentDate || !appointmentTime) {
       return null
@@ -252,6 +269,14 @@ export default function BookingStepper() {
     [selectedOptions, optionIndex]
   )
 
+  const serviceSummary = useMemo(() => {
+    if (summary.services.length === 0) {
+      return null
+    }
+
+    return summary.services.map((item) => item.optionLabel).join(", ")
+  }, [summary])
+
   const specialistCategoryIds = useMemo(() => {
     const seen = new Set<string>()
     const ids: string[] = []
@@ -270,13 +295,86 @@ export default function BookingStepper() {
     return ids
   }, [selectedOptions, optionIndex])
 
+  const specialistSummary = useMemo(() => {
+    if (specialistCategoryIds.length === 0) {
+      return null
+    }
+
+    const entries = specialistCategoryIds
+      .map((categoryId) => {
+        const selectedId = selectedSpecialists[categoryId]
+        if (!selectedId) return null
+
+        const catalogEntry = specialistCatalog[categoryId]
+        if (!catalogEntry) return null
+
+        const specialist = catalogEntry.options.find((option) => option.id === selectedId)
+        if (!specialist) return null
+
+        const label = catalogEntry.label ?? categoryId
+        return `${label}: ${specialist.name}`
+      })
+      .filter((entry): entry is string => Boolean(entry))
+
+    if (entries.length === 0) {
+      return null
+    }
+
+    return entries.join(", ")
+  }, [selectedSpecialists, specialistCategoryIds])
+
+  const totalDurationLabel = useMemo(
+    () => formatDuration(summary.totalDurationMinutes),
+    [summary.totalDurationMinutes]
+  )
+  const totalPriceLabel = useMemo(
+    () => formatPrice(summary.totalPrice),
+    [summary.totalPrice]
+  )
+  const recurrenceLabel = useMemo(() => {
+    if (!isRecurring) {
+      return null
+    }
+
+    return (
+      RECURRENCE_OPTIONS.find((option) => option.value === recurrenceFrequency)?.label ?? null
+    )
+  }, [isRecurring, recurrenceFrequency])
+
+  const messageContext = useMemo(
+    () => ({
+      customerName: trimmedCustomerName,
+      appointmentDate,
+      appointmentTime,
+      appointmentConfirmationLabel,
+      serviceSummary,
+      specialistSummary,
+      totalDurationLabel,
+      totalPriceLabel,
+      recurrenceLabel,
+      isWaitlistEnabled,
+    }),
+    [
+      trimmedCustomerName,
+      appointmentDate,
+      appointmentTime,
+      appointmentConfirmationLabel,
+      serviceSummary,
+      specialistSummary,
+      totalDurationLabel,
+      totalPriceLabel,
+      recurrenceLabel,
+      isWaitlistEnabled,
+    ]
+  )
+
   const canContinue = useMemo(() => {
     if (isCustomerDetailsGroup) {
-      const trimmedEmail = customerEmail.trim()
-      const hasEmailError = trimmedEmail.length > 0 && !EMAIL_REGEX.test(trimmedEmail)
+      const hasEmailError =
+        trimmedCustomerEmail.length > 0 && !EMAIL_REGEX.test(trimmedCustomerEmail)
       return (
-        Boolean(customerName.trim()) &&
-        Boolean(customerPhone.trim()) &&
+        Boolean(trimmedCustomerName) &&
+        Boolean(trimmedCustomerPhone) &&
         !hasEmailError
       )
     }
@@ -325,9 +423,9 @@ export default function BookingStepper() {
     appointmentDate,
     appointmentTime,
     currentGroup,
-    customerName,
-    customerEmail,
-    customerPhone,
+    trimmedCustomerName,
+    trimmedCustomerEmail,
+    trimmedCustomerPhone,
     isAppointmentGroup,
     isCustomerDetailsGroup,
     isSpecialistGroup,
@@ -381,6 +479,27 @@ export default function BookingStepper() {
     if (confirmationStatus !== "idle" && hasChanges) {
       setConfirmationStatus("idle")
       setConfirmationError(null)
+    }
+
+    if (hasChanges) {
+      setAdminMessageStatus((prev) => {
+        if (prev.reminder === "idle" && prev["thank-you"] === "idle") {
+          return prev
+        }
+        return {
+          reminder: "idle",
+          "thank-you": "idle",
+        }
+      })
+      setAdminMessageError((prev) => {
+        if (!prev.reminder && !prev["thank-you"]) {
+          return prev
+        }
+        return {
+          reminder: null,
+          "thank-you": null,
+        }
+      })
     }
 
     confirmationSnapshotRef.current = {
@@ -481,6 +600,13 @@ export default function BookingStepper() {
   }, [confirmationStatus, isFinalGroup])
 
   const showFloatingAction = isMobile && canContinue && !isPrimaryButtonInView
+  const hasAppointmentDetails = Boolean(
+    appointmentDate &&
+      appointmentTime &&
+      summary.services.length > 0 &&
+      trimmedCustomerPhone
+  )
+  const canSendAdminMessages = isFinalGroup && hasAppointmentDetails
 
   const ensureGroupsTrimmed = () => {
     setStepGroups((prev) => {
@@ -489,6 +615,23 @@ export default function BookingStepper() {
       }
       return prev.slice(0, currentGroupIndex + 1)
     })
+  }
+
+  const postWhatsAppMessage = async (message: string) => {
+    const response = await fetch("/api/mock/send-whatsapp", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorPayload = await response.json().catch(() => null)
+      throw new Error(errorPayload?.error ?? "Failed to send WhatsApp message")
+    }
   }
 
   const updateSelection = (stepId: string, optionId: string) => {
@@ -545,6 +688,61 @@ export default function BookingStepper() {
     setCurrentGroupIndex((prev) => Math.max(prev - 1, 0))
   }
 
+  const handleAdminMessageSend = async (kind: AdminMessageKind) => {
+    if (!canSendAdminMessages) {
+      return
+    }
+
+    setAdminMessageStatus((prev) => ({
+      ...prev,
+      [kind]: "loading",
+    }))
+    setAdminMessageError((prev) => ({
+      ...prev,
+      [kind]: null,
+    }))
+
+    try {
+      const message = buildWhatsAppMessage(kind, messageContext)
+      await postWhatsAppMessage(message)
+      setAdminMessageStatus((prev) => ({
+        ...prev,
+        [kind]: "success",
+      }))
+    } catch (error) {
+      console.error(`Failed to send WhatsApp ${kind} message`, error)
+      setAdminMessageStatus((prev) => ({
+        ...prev,
+        [kind]: "error",
+      }))
+      setAdminMessageError((prev) => ({
+        ...prev,
+        [kind]:
+          kind === "reminder"
+            ? "Nu am putut trimite reminder-ul. Te rugăm să încerci din nou."
+            : "Nu am putut trimite mesajul de mulțumire. Te rugăm să încerci din nou.",
+      }))
+    }
+  }
+
+  const renderAdminStatus = (kind: AdminMessageKind) => {
+    const status = adminMessageStatus[kind]
+
+    if (status === "success") {
+      const successCopy =
+        kind === "reminder"
+          ? "Reminder trimis pe WhatsApp."
+          : "Mesajul de mulțumire a fost trimis pe WhatsApp."
+      return <span className="text-xs font-medium text-emerald-600">{successCopy}</span>
+    }
+
+    if (status === "error" && adminMessageError[kind]) {
+      return <span className="text-xs font-medium text-destructive">{adminMessageError[kind]}</span>
+    }
+
+    return null
+  }
+
   const goForward = async () => {
     if (isFinalGroup) {
       if (isSubmittingFinal) {
@@ -553,13 +751,6 @@ export default function BookingStepper() {
 
       setIsSubmittingFinal(true)
       setConfirmationError(null)
-
-      const trimmedName = customerName.trim()
-      const trimmedPhone = customerPhone.trim()
-      const trimmedEmail = customerEmail.trim()
-      const recurrenceLabel = isRecurring
-        ? RECURRENCE_OPTIONS.find((option) => option.value === recurrenceFrequency)?.label ?? null
-        : null
 
       console.info("Appointment confirmed", {
         services: summary.services,
@@ -574,64 +765,15 @@ export default function BookingStepper() {
           waitlistEnabled: isWaitlistEnabled,
         },
         customer: {
-          name: trimmedName,
-          phone: trimmedPhone,
-          email: trimmedEmail || null,
+          name: trimmedCustomerName,
+          phone: trimmedCustomerPhone,
+          email: trimmedCustomerEmail || null,
         },
       })
-
-      const serviceSummary = summary.services
-        .map((item) => item.optionLabel)
-        .join(", ")
-
-      const specialistSummaryList = Object.entries(selectedSpecialists)
-        .map(([categoryId, specialistId]) => {
-          const catalogEntry = specialistCatalog[categoryId]
-          if (!catalogEntry) {
-            return null
-          }
-          const specialist = catalogEntry.options.find((option) => option.id === specialistId)
-          if (!specialist) {
-            return null
-          }
-          const categoryLabel = catalogEntry.label ?? categoryId
-          return `${categoryLabel}: ${specialist.name}`
-        })
-        .filter((entry): entry is string => Boolean(entry))
-
-      const specialistSummary =
-        specialistSummaryList.length > 0 ? specialistSummaryList.join(", ") : null
-
-      const messageLines = [
-        `Salut${trimmedName ? `, ${trimmedName}` : ""}! 🌟 Confirmăm cu drag programarea ta.`,
-        appointmentConfirmationLabel ? `\n📅 Te așteptăm ${appointmentConfirmationLabel}` : null,
-        serviceSummary ? `\n✂️ Serviciu: ${serviceSummary}.` : null,
-        specialistSummary ? `👤 Specialist: ${specialistSummary}.` : null,
-        `🕒 Durata totală: ${formatDuration(summary.totalDurationMinutes)}`,
-        `📃 Cost: ${formatPrice(summary.totalPrice)}`,
-        recurrenceLabel ? `🔁 Program recurent: ${recurrenceLabel.toLowerCase()}` : null,
-        isWaitlistEnabled
-          ? "\nȚinem lista de așteptare pornită pentru o posibilă reprogramare mai rapidă. ⚡"
-          : null,
-        "\nTe rugăm să ne scrii dacă ai nevoie de orice ajustare. 🤝",
-      ].filter(Boolean)
+      const confirmationMessage = buildWhatsAppMessage("confirmation", messageContext)
 
       try {
-        const response = await fetch("/api/mock/send-whatsapp", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            message: messageLines.join("\n"),
-          }),
-        })
-
-        if (!response.ok) {
-          const errorPayload = await response.json().catch(() => null)
-          throw new Error(errorPayload?.error ?? "Failed to send WhatsApp message")
-        }
-
+        await postWhatsAppMessage(confirmationMessage)
         setConfirmationStatus("success")
       } catch (error) {
         console.error("Failed to send WhatsApp confirmation", error)
@@ -1017,15 +1159,16 @@ export default function BookingStepper() {
   }
 
   const renderCustomerDetailsStep = () => {
-    const trimmedEmail = customerEmail.trim()
-    const nameError = customerTouched.name && customerName.trim() === ""
+    const nameError = customerTouched.name && trimmedCustomerName === ""
       ? "Numele este obligatoriu."
       : null
-    const phoneError = customerTouched.phone && customerPhone.trim() === ""
+    const phoneError = customerTouched.phone && trimmedCustomerPhone === ""
       ? "Numărul de telefon este obligatoriu."
       : null
     const emailError =
-      customerTouched.email && trimmedEmail !== "" && !EMAIL_REGEX.test(trimmedEmail)
+      customerTouched.email &&
+      trimmedCustomerEmail !== "" &&
+      !EMAIL_REGEX.test(trimmedCustomerEmail)
         ? "Introdu o adresă de email validă."
         : null
 
@@ -1162,10 +1305,40 @@ export default function BookingStepper() {
             )}
           </CardContent>
 
-          <CardFooter className="flex flex-wrap justify-between gap-3">
-            <Button variant="ghost" onClick={goBack} disabled={currentGroupIndex === 0}>
-              Înapoi
-            </Button>
+          <CardFooter className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-3">
+              <Button variant="ghost" onClick={goBack} disabled={currentGroupIndex === 0}>
+                Înapoi
+              </Button>
+              {isAdminMode && isFinalGroup && (
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:gap-3">
+                  <div className="flex flex-col gap-1">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleAdminMessageSend("reminder")}
+                      disabled={!canSendAdminMessages || adminMessageStatus.reminder === "loading" || isSubmittingFinal}
+                    >
+                      {adminMessageStatus.reminder === "loading" ? "Se trimite..." : "Trimite reminder"}
+                    </Button>
+                    {renderAdminStatus("reminder")}
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleAdminMessageSend("thank-you")}
+                      disabled={!canSendAdminMessages || adminMessageStatus["thank-you"] === "loading" || isSubmittingFinal}
+                    >
+                      {adminMessageStatus["thank-you"] === "loading"
+                        ? "Se trimite..."
+                        : "Trimite mesaj de mulțumire"}
+                    </Button>
+                    {renderAdminStatus("thank-you")}
+                  </div>
+                </div>
+              )}
+            </div>
             <Button
               ref={primaryButtonRef}
               onClick={goForward}
@@ -1212,13 +1385,11 @@ export default function BookingStepper() {
                 <div className="space-y-1 text-sm">
                   <div className="flex items-center justify-between">
                     <span>Durată totală</span>
-                    <span className="font-semibold">
-                      {formatDuration(summary.totalDurationMinutes)}
-                    </span>
+                    <span className="font-semibold">{totalDurationLabel}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Cost total</span>
-                    <span className="font-semibold">{formatPrice(summary.totalPrice)}</span>
+                    <span className="font-semibold">{totalPriceLabel}</span>
                   </div>
                   {appointmentDate && appointmentTime && (
                     <div className="flex flex-col gap-1 pt-1 text-xs text-muted-foreground">
@@ -1230,16 +1401,16 @@ export default function BookingStepper() {
                       </span>
                     </div>
                   )}
-                  {(customerName.trim() || customerPhone.trim() || customerEmail.trim()) && (
+                  {(trimmedCustomerName || trimmedCustomerPhone || trimmedCustomerEmail) && (
                     <div className="flex flex-col gap-1 pt-1 text-xs text-muted-foreground">
                       <span className="font-medium uppercase tracking-wide text-[0.7rem] text-foreground">
                         Client
                       </span>
-                      {customerName.trim() && (
-                        <span className="text-sm text-foreground">{customerName.trim()}</span>
+                      {trimmedCustomerName && (
+                        <span className="text-sm text-foreground">{trimmedCustomerName}</span>
                       )}
-                      {customerPhone.trim() && <span>{customerPhone.trim()}</span>}
-                      {customerEmail.trim() && <span>{customerEmail.trim()}</span>}
+                      {trimmedCustomerPhone && <span>{trimmedCustomerPhone}</span>}
+                      {trimmedCustomerEmail && <span>{trimmedCustomerEmail}</span>}
                     </div>
                   )}
                   {Object.keys(selectedSpecialists).length > 0 && (
