@@ -9,6 +9,7 @@ import {
   Circle,
   ChevronRight,
   Square,
+  XCircle,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -81,7 +82,7 @@ const formatPrice = (value: number) =>
     minimumFractionDigits: 0,
   }).format(value)
 
-type ConfirmationStatus = "idle" | "success"
+type ConfirmationStatus = "idle" | "success" | "error"
 
 interface OptionCardProps {
   option: FlowOption
@@ -169,6 +170,8 @@ export default function BookingStepper() {
     email: false,
   })
   const [confirmationStatus, setConfirmationStatus] = useState<ConfirmationStatus>("idle")
+  const [confirmationError, setConfirmationError] = useState<string | null>(null)
+  const [isSubmittingFinal, setIsSubmittingFinal] = useState(false)
 
   const trimmedCustomerPhone = useMemo(() => customerPhone.trim(), [customerPhone])
   const appointmentConfirmationLabel = useMemo(() => {
@@ -375,8 +378,9 @@ export default function BookingStepper() {
       snapshot.customerPhone !== customerPhone ||
       snapshot.customerEmail !== customerEmail
 
-    if (confirmationStatus === "success" && hasChanges) {
+    if (confirmationStatus !== "idle" && hasChanges) {
       setConfirmationStatus("idle")
+      setConfirmationError(null)
     }
 
     confirmationSnapshotRef.current = {
@@ -470,8 +474,9 @@ export default function BookingStepper() {
   }, [appointmentDate, appointmentTime, isRecurring, isWaitlistEnabled])
 
   useEffect(() => {
-    if (!isFinalGroup && confirmationStatus === "success") {
+    if (!isFinalGroup && confirmationStatus !== "idle") {
       setConfirmationStatus("idle")
+      setConfirmationError(null)
     }
   }, [confirmationStatus, isFinalGroup])
 
@@ -540,8 +545,22 @@ export default function BookingStepper() {
     setCurrentGroupIndex((prev) => Math.max(prev - 1, 0))
   }
 
-  const goForward = () => {
+  const goForward = async () => {
     if (isFinalGroup) {
+      if (isSubmittingFinal) {
+        return
+      }
+
+      setIsSubmittingFinal(true)
+      setConfirmationError(null)
+
+      const trimmedName = customerName.trim()
+      const trimmedPhone = customerPhone.trim()
+      const trimmedEmail = customerEmail.trim()
+      const recurrenceLabel = isRecurring
+        ? RECURRENCE_OPTIONS.find((option) => option.value === recurrenceFrequency)?.label ?? null
+        : null
+
       console.info("Appointment confirmed", {
         services: summary.services,
         totalDuration: summary.totalDurationMinutes,
@@ -551,18 +570,60 @@ export default function BookingStepper() {
           date: appointmentDate?.toISOString(),
           time: appointmentTime,
           recurrence: isRecurring ? recurrenceFrequency : null,
-          recurrenceLabel: isRecurring
-            ? RECURRENCE_OPTIONS.find((option) => option.value === recurrenceFrequency)?.label ?? null
-            : null,
+          recurrenceLabel,
           waitlistEnabled: isWaitlistEnabled,
         },
         customer: {
-          name: customerName.trim(),
-          phone: customerPhone.trim(),
-          email: customerEmail.trim() || null,
+          name: trimmedName,
+          phone: trimmedPhone,
+          email: trimmedEmail || null,
         },
       })
-      setConfirmationStatus("success")
+
+      const serviceSummary = summary.services
+        .map((item) => item.optionLabel)
+        .join(", ")
+
+      const messageLines = [
+        `Salut${trimmedName ? `, ${trimmedName}` : ""}! Programarea ta a fost confirmată.`,
+        appointmentConfirmationLabel
+          ? `Ne vedem pe ${appointmentConfirmationLabel}.`
+          : null,
+        serviceSummary ? `Servicii: ${serviceSummary}.` : null,
+        `Durată totală: ${formatDuration(summary.totalDurationMinutes)}.`,
+        `Cost estimativ: ${formatPrice(summary.totalPrice)}.`,
+        recurrenceLabel ? `Recurență: ${recurrenceLabel.toLowerCase()}.` : null,
+        isWaitlistEnabled ? "Lista de așteptare rămâne activă pentru notificări mai rapide." : null,
+        "Dacă ai întrebări, răspunde direct la acest mesaj.",
+      ].filter(Boolean)
+
+      try {
+        const response = await fetch("/api/mock/send-whatsapp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            message: messageLines.join("\n"),
+          }),
+        })
+
+        if (!response.ok) {
+          const errorPayload = await response.json().catch(() => null)
+          throw new Error(errorPayload?.error ?? "Failed to send WhatsApp message")
+        }
+
+        setConfirmationStatus("success")
+      } catch (error) {
+        console.error("Failed to send WhatsApp confirmation", error)
+        setConfirmationStatus("error")
+        setConfirmationError(
+          "Nu am putut trimite mesajul de confirmare pe WhatsApp. Te rugăm să încerci din nou."
+        )
+      } finally {
+        setIsSubmittingFinal(false)
+      }
+
       return
     }
 
@@ -1024,6 +1085,17 @@ export default function BookingStepper() {
       <div className="space-y-6 md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:items-start md:gap-6 md:space-y-0">
         <Card className="shadow-lg">
           <CardContent className="space-y-10">
+            {isFinalGroup && confirmationStatus === "error" && confirmationError && (
+              <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-destructive-foreground shadow-sm">
+                <div className="flex items-start gap-3">
+                  <XCircle className="mt-0.5 size-5" aria-hidden="true" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold leading-none">Nu am putut confirma prin WhatsApp</p>
+                    <p className="text-sm">{confirmationError}</p>
+                  </div>
+                </div>
+              </div>
+            )}
             {isFinalGroup && confirmationStatus === "success" && (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 shadow-sm">
                 <div className="flex items-start gap-3">
@@ -1078,10 +1150,14 @@ export default function BookingStepper() {
             <Button
               ref={primaryButtonRef}
               onClick={goForward}
-              disabled={!canContinue}
+              disabled={!canContinue || isSubmittingFinal}
               className="min-w-48"
             >
-              {isFinalGroup ? "Confirmă programarea" : "Continuă"}
+              {isFinalGroup
+                ? isSubmittingFinal
+                  ? "Se confirmă..."
+                  : "Confirmă programarea"
+                : "Continuă"}
             </Button>
           </CardFooter>
         </Card>
@@ -1181,8 +1257,9 @@ export default function BookingStepper() {
           className="fixed bottom-5 right-5 z-40 rounded-full px-6 py-5 shadow-lg md:hidden"
           onClick={goForward}
           aria-label={isFinalGroup ? "Confirmă programarea" : "Continuă"}
+          disabled={isSubmittingFinal}
         >
-          {isFinalGroup ? "Confirmă" : "Continuă"}
+          {isFinalGroup ? (isSubmittingFinal ? "..." : "Confirmă") : "Continuă"}
         </Button>
       )}
     </>
